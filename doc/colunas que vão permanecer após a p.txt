@@ -1,0 +1,11 @@
+colunas que vão permanecer após a primeira filtragem :
+UT	Faixa	Placa	NomeVulgar	NomeCientifico	CAP	ALT	QF	X	Y	DAP	Volume_m3	Latitude	Longitude	DM	Observacoes	Categoria
+
+criada :
+NomeCientifico   categoria
+
+as que estavam :
+Folha	Secção	UT	Faixa	Placa	Cod.	Nome Vulgar	CAP	ALT	QF	X	Y	X Corrigido	Y Corrigido	DAP	Volumes (m³)	X Negativo	Y Negativo	Latitude	Longitude	DM	Observações	N
+
+as que saíram :
+Folha  Secção Cod.  X Corrigido  Y Corrigido X Negativo Y Negativo

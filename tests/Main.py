@@ -84,7 +84,7 @@ def processar_planilha():
 
 # Criação da interface principal
 app = tk.Tk()
-app.title("Processador de Planilhas - Filtrar e Processar")
+app.title("IFDIGITAL 3.0")
 app.geometry("500x600")
 
 # Variáveis para os arquivos e a operação
