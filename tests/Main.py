@@ -2,6 +2,7 @@ import pandas as pd
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import os
+from openpyxl import load_workbook
 
 # Colunas de entrada e saída
 COLUNAS_ENTRADA = [
@@ -31,8 +32,43 @@ def selecionar_arquivos():
     if arquivo2:
         entrada2_var.set(arquivo2)
 
+def ajustar_largura_colunas(arquivo):
+    """Ajusta a largura das colunas do arquivo Excel."""
+    try:
+        wb = load_workbook(arquivo)
+        ws = wb.active
+
+        # Definir larguras para as colunas específicas
+        largura_colunas = {
+            "A": 5,  # UT
+            "B": 5,  # Faixa
+            "C": 5,  # Placa
+            "D": 20,  # NomeVulgar
+            "E": 25,  # NomeCientifico
+            "F": 5,  # CAP
+            "G": 5,  # ALT
+            "H": 5,  # QF
+            "I": 5,  # X
+            "J": 5,  # Y
+            "K": 10,  # DAP
+            "L": 15,  # Volume_m3
+            "M": 15,  # Latitude
+            "N": 15,  # Longitude
+            "O": 10,  # DM
+            "P": 15,  # Observacoes
+            "Q": 15   # Categoria
+        }
+
+        for coluna, largura in largura_colunas.items():
+            ws.column_dimensions[coluna].width = largura
+
+        # Salvar o arquivo com os ajustes
+        wb.save(arquivo)
+    except Exception as e:
+        messagebox.showerror("Erro", f"Falha ao ajustar as larguras das colunas: {e}")
+
 def processar_planilhas():
-    """Processa os dados da planilha principal, mescla com nomes científicos e ajusta a posição da coluna NomeCientifico_y."""
+    """Processa os dados da planilha principal, mescla com nomes científicos e ajusta a posição da coluna NomeCientifico."""
     arquivo1 = entrada1_var.get()
     arquivo2 = entrada2_var.get()
 
@@ -110,6 +146,9 @@ def processar_planilhas():
 
         # Salvando a planilha final
         df_saida.to_excel(arquivo_saida, index=False, engine="openpyxl")
+
+        # Ajustar a largura das colunas no arquivo Excel
+        ajustar_largura_colunas(arquivo_saida)
 
         messagebox.showinfo("Sucesso", f"Planilha processada salva em:\n{arquivo_saida}")
     except Exception as e:
