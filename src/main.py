@@ -4,8 +4,7 @@ from tkinter import filedialog, messagebox, ttk
 import threading
 import os
 import time
-from openpyxl import load_workbook
-from openpyxl.utils import get_column_letter
+from pacotes.ajustar_largura_colunas import ajustar_largura_colunas
 
 # Colunas de entrada e saída
 COLUNAS_ENTRADA = [
@@ -110,34 +109,14 @@ def processar_planilhas():
         # Carregar a segunda planilha
         print("Carregando a segunda planilha...")
         df2 = pd.read_excel(arquivo2, engine="openpyxl")
-        df2.rename(columns={
-            "NOME_VULGAR": "Nome Vulgar", 
-            "NOME_CIENTIFICO": "Nome Cientifico",
-            "SITUACAO": "Situacao"
-        }, inplace=True)
+        df2.rename(columns={"NOME_VULGAR": "Nome Vulgar", "NOME_CIENTIFICO": "Nome Cientifico"}, inplace=True)
 
-        # Normalizar as colunas "Nome Vulgar" e "Nome Cientifico" e mesclar os dados
+        # Normalizar as colunas "Nome Vulgar" e mesclar os dados
         df_saida["Nome Vulgar"] = df_saida["Nome Vulgar"].str.strip().str.upper()
         df2["Nome Vulgar"] = df2["Nome Vulgar"].str.strip().str.upper()
-        df2["Nome Cientifico"] = df2["Nome Cientifico"].str.strip().str.upper()
-        df_saida = pd.merge(df_saida, df2[["Nome Vulgar", "Nome Cientifico", "Situacao"]], 
-                            on="Nome Vulgar", how="left")
-        #categorizando as arvores REM
-        # Atualizar a coluna "Categoria" com "REM" se a situação for "protegida"
-        df_saida.loc[df_saida["Situacao"].str.lower() == "protegida", "Categoria"] = "REM"
-        # Atualiza a coluna 'Categoria' com "REM" para linhas onde 'DAP' < 0.5
-        df_saida.loc[df_saida["DAP"] < 0.5, "Categoria"] = "REM"
-        # Atualiza a coluna 'Categoria' com "REM" para linhas onde 'DAP' >= 2
-        df_saida.loc[df_saida["DAP"] >= 2, "Categoria"] = "REM"
-        # Atualiza a coluna 'Categoria' com "REM" para linhas onde 'QF' = 3
-        df_saida.loc[df_saida["QF"] == 3, "Categoria"] = "REM"
-        # Atualiza a coluna 'Categoria' com "REM" para linhas onde 'ALT' > 25
-        df_saida.loc[df_saida["ALT"] >= 25, "ALT" ] = "REM"
-
-
-
-        #apagar acoluna "situação após a ultilizacao"
-        df_saida = df_saida.drop(columns="Situacao")
+        df_saida = pd.merge(df_saida, df2[["Nome Vulgar", "Nome Cientifico"]], on="Nome Vulgar", how="left")
+        progress_var.set(80)
+        progress_bar.update()
 
         # Reordenar as colunas para garantir que "Nome Cientifico" esteja ao lado de "Nome Vulgar"
         colunas = list(df_saida.columns)
@@ -146,7 +125,7 @@ def processar_planilhas():
             idx = colunas.index("Nome Vulgar") + 1
             colunas.insert(idx, "Nome Cientifico")
         df_saida = df_saida[colunas]
-
+        
         # Salvar o arquivo de saída
         print("Salvando o arquivo de saída...")
         diretorio = os.path.dirname(entrada1_var.get())
@@ -154,6 +133,9 @@ def processar_planilhas():
         df_saida.to_excel(arquivo_saida, index=False, engine="xlsxwriter")
         progress_var.set(100)
         progress_bar.update()
+
+        # Após salvar o arquivo
+        # ajustar_largura_colunas(arquivo_saida)
 
         elapsed_time = time.time() - start_time
         print(f"Processamento concluído em {elapsed_time:.2f} segundos.")

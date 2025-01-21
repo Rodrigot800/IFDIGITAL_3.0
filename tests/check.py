@@ -128,9 +128,9 @@ def processar_planilhas():
         # Atualiza a coluna 'Categoria' com "REM" para linhas onde 'DAP' < 0.5
         df_saida.loc[df_saida["DAP"] < 0.5, "Categoria"] = "REM"
         # Atualiza a coluna 'Categoria' com "REM" para linhas onde 'DAP' >= 2
-        df_saida.loc[df_saida["DAP"] >= 2, "Categoria"] = "REM"
+        df_saida.loc[df_saida["DAP"] >= 0.2, "Categoria"] = "REM"
         # Atualiza a coluna 'Categoria' com "REM" para linhas onde 'QF' = 3
-        df_saida.loc[df_saida["QF"] == 3, "Categoria"] = "REM"
+        df_saida.loc[df_saida["QF"] == 3, "QF"] = "REM"
         # Atualiza a coluna 'Categoria' com "REM" para linhas onde 'ALT' > 25
         df_saida.loc[df_saida["ALT"] >= 25, "ALT" ] = "REM"
 
