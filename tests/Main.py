@@ -1,7 +1,9 @@
 import pandas as pd
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog, messagebox, ttk
 import threading
+import os
+import time
 
 # Variáveis globais
 planilha_principal = None
@@ -9,6 +11,18 @@ planilha_secundaria = None
 nomes_vulgares = []  # Lista de todos os nomes vulgares
 nomes_selecionados = []  # Lista para manter a ordem dos nomes selecionados
 
+# Colunas de entrada e saída
+COLUNAS_ENTRADA = [
+    "Folha", "Secção", "UT", "Faixa", "Placa", "Cod.", "Nome Vulgar", "CAP", "ALT", "QF",
+    "X", "Y", "DAP", "Volumes (m³)", "Latitude", "Longitude", "DM", "Observações"
+]
+
+COLUNAS_SAIDA = [
+    "UT", "Faixa", "Placa", "Nome Vulgar", "Nome Cientifico", "CAP", "ALT", "QF", "X", "Y",
+    "DAP", "Volume_m3", "Latitude", "Longitude", "DM", "Observacoes", "Categoria"
+]
+
+# Funções da Interface e Processamento
 
 def selecionar_arquivos(tipo):
     """Seleciona os arquivos das planilhas."""
@@ -44,7 +58,7 @@ def carregar_planilha_principal(arquivo1):
         frame_listbox.pack(pady=10)
         frame_secundario.pack(pady=10)
     except Exception as e:
-        print(f"Erro: {e}")
+        tk.messagebox.showerror("Erro", f"Erro ao carregar a planilha principal: {e}")
     finally:
         status_label.pack_forget()
 
@@ -56,7 +70,7 @@ def carregar_planilha_secundaria(arquivo2):
         planilha_secundaria = pd.read_excel(arquivo2, engine="openpyxl")
         print("Planilha secundária carregada com sucesso.")
     except Exception as e:
-        print(f"Erro ao carregar a planilha secundária: {e}")
+        tk.messagebox.showerror("Erro", f"Erro ao carregar a planilha secundária: {e}")
 
 
 def atualizar_listbox_nomes(filtro):
@@ -106,24 +120,38 @@ def limpar_lista_selecionados():
 
 
 def processar_planilhas():
-    """Processa os dados das planilhas."""
-    global planilha_principal, planilha_secundaria
+    """Processa os dados da planilha principal e mescla com nomes científicos."""
+    global planilha_principal
 
+    arquivo2 = entrada2_var.get()
+
+    # Verificar se a planilha principal já foi carregada
     if planilha_principal is None:
-        tk.messagebox.showerror("Erro", "Por favor, carregue a planilha principal.")
+        messagebox.showerror("Erro", "Por favor, selecione e aguarde o carregamento da planilha principal.")
         return
 
-    if planilha_secundaria is None:
-        tk.messagebox.showerror("Erro", "Por favor, carregue a planilha secundária.")
+    # Verificar se o segundo arquivo foi selecionado
+    if not arquivo2:
+        messagebox.showerror("Erro", "Por favor, selecione o arquivo de Nomes Vulgares e Científicos.")
         return
 
-    # Lógica de processamento das planilhas
-    print(f"Processando planilhas com os nomes selecionados: {nomes_selecionados}")
+    try:
+        # Código do processamento
+        print("Processamento realizado!")
+    except Exception as e:
+        tk.messagebox.showerror("Erro", f"Erro ao processar as planilhas: {e}")
+
+
+def iniciar_processamento():
+    """Inicia o processamento em uma thread separada."""
+    thread = threading.Thread(target=processar_planilhas)
+    thread.daemon = True  # Fecha a thread quando a interface é fechada
+    thread.start()
 
 
 # Interface gráfica
 app = tk.Tk()
-app.title("Processador de Inventário e Mesclagem")
+app.title("IFDIGITAL 3.0")
 app.geometry("900x700")
 
 entrada1_var = tk.StringVar()
@@ -164,7 +192,7 @@ ttk.Button(frame_listbox, text="Limpar Lista", command=limpar_lista_selecionados
 
 # Frame para o botão de processamento
 frame_secundario = ttk.Frame(app, padding=(10, 10))
-ttk.Button(frame_secundario, text="Processar Planilhas", command=processar_planilhas, width=40).pack(pady=10)
+ttk.Button(frame_secundario, text="Processar Planilhas", command=iniciar_processamento, width=40).pack(pady=10)
 
 frame_listbox.pack_forget()  # Inicialmente escondido
 frame_secundario.pack_forget()  # Inicialmente escondido
