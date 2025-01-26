@@ -128,16 +128,17 @@ def processar_planilhas():
         # Atualiza a coluna 'Categoria' com "REM" para linhas onde 'DAP' < 0.5
         df_saida.loc[df_saida["DAP"] < 0.5, "Categoria"] = "REM"
         # Atualiza a coluna 'Categoria' com "REM" para linhas onde 'DAP' >= 2
-        df_saida.loc[df_saida["DAP"] >= 0.2, "Categoria"] = "REM"
+        df_saida.loc[df_saida["DAP"] >= 2, "Categoria"] = "REM"
         # Atualiza a coluna 'Categoria' com "REM" para linhas onde 'QF' = 3
-        df_saida.loc[df_saida["QF"] == 3, "QF"] = "REM"
-        # Atualiza a coluna 'Categoria' com "REM" para linhas onde 'ALT' > 25
-        df_saida.loc[df_saida["ALT"] >= 25, "ALT" ] = "REM"
+        df_saida.loc[df_saida["QF"] == 3, "Categoria"] = "REM"
+        # Atualiza a coluna 'Categoria' com "REM" para linhas onde 'ALT' > (DEFINITO PELO USUARIO)
+        # Criterio e opcional
+        df_saida.loc[df_saida["ALT"] >= 0, "ALT" ] = "REM"
 
 
 
-        #apagar acoluna "situação após a ultilizacao"
-        df_saida = df_saida.drop(columns="Situacao")
+        # #apagar acoluna "situação após a ultilizacao"
+        # df_saida = df_saida.drop(columns="Situacao")
 
         # Reordenar as colunas para garantir que "Nome Cientifico" esteja ao lado de "Nome Vulgar"
         colunas = list(df_saida.columns)
