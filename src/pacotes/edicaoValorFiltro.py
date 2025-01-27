@@ -1,8 +1,8 @@
 import tkinter as tk
-from tkinter import messagebox
 
-def abrir_janela_valores_padroes():
+def abrir_janela_valores_padroes(root):
     """Abre uma nova janela com inputs de valores padrão."""
+    
     def confirmar_valores():
         """Função executada ao clicar no botão 'Confirmar'."""
         valor1 = input_valor1.get()
@@ -55,26 +55,3 @@ def abrir_janela_valores_padroes():
         width=12,
         height=2,
     ).pack(pady=10)
-
-    # Bloqueia a janela principal enquanto a janela de valores está aberta
-    janela_padrao.grab_set()  # Faz a janela "janela_padrao" pegar o foco
-    root.wait_window(janela_padrao)  # Esse método bloqueia a janela principal enquanto a janela_padrao está aberta
-
-# Janela principal
-root = tk.Tk()
-root.title("Janela Principal")
-root.geometry("300x200")
-root.resizable(False, False)
-
-# Botão na janela principal para abrir a janela de valores padrões
-tk.Button(
-    root,
-    text="Valores Padrões",
-    font=("Arial", 12),
-    bg="lightgreen",
-    command=abrir_janela_valores_padroes,
-    width=15,
-    height=2,
-).pack(pady=50)
-
-root.mainloop()

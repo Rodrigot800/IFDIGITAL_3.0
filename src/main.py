@@ -4,12 +4,14 @@ from tkinter import filedialog, messagebox, ttk
 import threading
 import os
 import time
+from pacotes.edicaoValorFiltro import abrir_janela_valores_padroes
 
 # Variáveis globais
 planilha_principal = None
 planilha_secundaria = None
 nomes_vulgares = []  # Lista de todos os nomes vulgares
 nomes_selecionados = []  # Lista para manter a ordem dos nomes selecionados
+start_total = None
 
 # Colunas de entrada e saída
 COLUNAS_ENTRADA = [
@@ -19,7 +21,7 @@ COLUNAS_ENTRADA = [
 
 COLUNAS_SAIDA = [
     "UT", "Faixa", "Placa", "Nome Vulgar", "Nome Cientifico", "CAP", "ALT", "QF", "X", "Y",
-    "DAP", "Volume_m3", "Latitude", "Longitude", "DM", "Observacoes", "Categoria"
+    "DAP", "Volume_m3", "Latitude", "Longitude", "DM", "Observacoes", "Categoria", "Situacao"
 ]
 
 # Funções da Interface e Processamento
@@ -42,6 +44,9 @@ def selecionar_arquivos(tipo):
 
 
 def carregar_planilha_principal(arquivo1):
+    global start_total
+    start_total = time.time() 
+    start_part1 = time.time()
     """Carrega a planilha principal e exibe os nomes vulgares."""
     global planilha_principal, nomes_vulgares
     try:
@@ -52,7 +57,7 @@ def carregar_planilha_principal(arquivo1):
         colunas_existentes = [col for col in planilha_principal.columns if col in ["Nome Vulgar"]]
         if not colunas_existentes:
             raise ValueError("A planilha principal não possui a coluna 'Nome Vulgar'.")
-        nomes_vulgares = sorted(planilha_principal["Nome Vulgar"].dropna().unique())
+        nomes_vulgares = sorted(planilha_principal["Nome Vulgar"].dropna().unique()) 
         atualizar_listbox_nomes("")  # Inicializa a Listbox com todos os nomes
 
         frame_listbox.pack(pady=10)
@@ -61,7 +66,8 @@ def carregar_planilha_principal(arquivo1):
         tk.messagebox.showerror("Erro", f"Erro ao carregar a planilha principal: {e}")
     finally:
         status_label.pack_forget()
-
+        end_part1 = time.time()
+        print(f"Tempo para carregar a planilha principal: {end_part1 - start_part1:.2f} segundos")
 
 def carregar_planilha_secundaria(arquivo2):
     """Carrega a planilha secundária em segundo plano."""
@@ -120,6 +126,7 @@ def limpar_lista_selecionados():
 
 
 def processar_planilhas():
+    inicioProcesso = time.time()
     """Processa os dados da planilha principal e mescla com nomes científicos."""
     global planilha_principal
 
@@ -137,7 +144,71 @@ def processar_planilhas():
 
     try:
         # Código do processamento
-        print("Processamento realizado!")
+        df_saida = pd.DataFrame()
+
+        for entrada, saida in {
+            "UT": "UT",
+            "Faixa": "Faixa",
+            "Placa": "Placa",
+            "Nome Vulgar": "Nome Vulgar",
+            "CAP": "CAP",
+            "ALT": "ALT",
+            "QF": "QF",
+            "X": "X",
+            "Y": "Y",
+            "DAP": "DAP",
+            "Volumes (m³)": "Volume_m3",
+            "Latitude": "Latitude",
+            "Longitude": "Longitude",
+            "DM": "DM",
+            "Observações": "Observacoes"
+        }.items():
+            if entrada in planilha_principal.columns:
+                df_saida[saida] = planilha_principal[entrada]
+            else:
+                df_saida[saida] = None
+            if "Categoria" not in df_saida.columns:
+                df_saida["Categoria"] = None
+        
+        df2 = pd.read_excel(arquivo2,engine="openpyxl")
+        df2.rename(columns={
+            "NOME_VULGAR": "Nome Vulgar",
+            "NOME_CIENTIFICO": "Nome Cientifico",
+            "SITUACAO":"Situacao"
+            }, inplace=True)
+        
+        df_saida["Nome Vulgar"] = df_saida["Nome Vulgar"].str.strip().str.upper()
+        df2["Nome Vulgar"] = df2["Nome Vulgar"].str.strip().str.upper()
+        df2["Nome Cientifico"] = df2["Nome Cientifico"].str.strip().str.upper()
+
+        df_saida = pd.merge(df_saida,df2[["Nome Vulgar","Nome Cientifico","Situacao"]],
+                            on="Nome Vulgar", how="left")
+        df_saida.loc[df_saida["Situacao"].str.lower() == "protegida", "Categoria"] = "REM"
+        df_saida.loc[df_saida["DAP"] < 0.5, "Categoria"] = "REM"
+        df_saida.loc[df_saida["DAP"] >= 2, "Categoria"] = "REM"
+        df_saida.loc[df_saida["QF"] == 3, "Categoria"] = "REM"
+        df_saida.loc[df_saida["Nome Cientifico"].isna() | (df_saida["Nome Cientifico"]== "") , "Nome Cientifico"] = "Não encontrado"
+
+        #organizando as colunas
+        df_saida = df_saida[COLUNAS_SAIDA]
+
+
+        finalProcesso = time.time()
+        print(f"Processamento realizado em {finalProcesso - inicioProcesso:.2f} s")
+
+        inicioTimeSalvar = time.time()
+        #salvar o arquivo no diretório
+        diretorio = os.path.dirname(entrada1_var.get())
+        arquivo_saida = os.path.join(diretorio, "Planilha Processada - IFDIGITAL 3.0.xlsx")
+        df_saida.to_excel(arquivo_saida,index=False,engine="xlsxwriter")
+        finalTimeSalvar = time.time()
+        print(f" arquico salvo em {finalTimeSalvar - inicioTimeSalvar:.2f} s")
+
+        end_total = time.time()
+        tempoTotal = end_total - start_total
+        print(f"Processamento realizado em {tempoTotal:.2f} s")
+        tk.messagebox.showinfo("SUCESSO",f" Processamento realizado em {tempoTotal:.2f} segundos")
+
     except Exception as e:
         tk.messagebox.showerror("Erro", f"Erro ao processar as planilhas: {e}")
 
@@ -169,6 +240,12 @@ ttk.Button(frame_inputs, text="Selecionar", command=lambda: selecionar_arquivos(
 ttk.Label(frame_inputs, text="Arquivo 2: Planilha Secundária").grid(row=1, column=0, sticky="w")
 ttk.Entry(frame_inputs, textvariable=entrada2_var, width=60).grid(row=1, column=1, pady=5, padx=5)
 ttk.Button(frame_inputs, text="Selecionar", command=lambda: selecionar_arquivos("secundaria")).grid(row=1, column=2, padx=5)
+#ttk.Button(frame_inputs, text="Novo Botão", command=lambda:abrir_janela_valores_padroes(root) ).grid(row=2, column=1, pady=10, padx=5)  # Botão abaixo dos inputs
+botao_modificar_filtro = tk.Button(app, text="Novo Botão", command=lambda:abrir_janela_valores_padroes )
+botao_modificar_filtro.pack(pady=5)
+
+frame_dados_de_Filtragem = ttk.LabelFrame(app, text="Dados de Filtragem", padding=(10,10))
+frame_dados_de_Filtragem.pack(fill="x", pady=10, padx=10)
 
 status_label = ttk.Label(app, text="")
 
