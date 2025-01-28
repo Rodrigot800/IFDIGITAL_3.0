@@ -4,7 +4,12 @@ from tkinter import filedialog, messagebox, ttk
 import threading
 import os
 import time
-from pacotes.edicaoValorFiltro import abrir_janela_valores_padroes
+from pacotes.edicaoValorFiltro import  abrir_janela_valores_padroes,valor1,valor2,valor3,valor4
+import os
+import configparser
+config = configparser.ConfigParser()
+config.read('config.ini')
+
 
 # Variáveis globais
 planilha_principal = None
@@ -12,6 +17,7 @@ planilha_secundaria = None
 nomes_vulgares = []  # Lista de todos os nomes vulgares
 nomes_selecionados = []  # Lista para manter a ordem dos nomes selecionados
 start_total = None
+
 
 # Colunas de entrada e saída
 COLUNAS_ENTRADA = [
@@ -125,7 +131,9 @@ def limpar_lista_selecionados():
     atualizar_listbox_selecionados()
 
 
-def processar_planilhas():
+def processar_planilhas(DAPmin,DAPmax,QF,alt):
+    
+
     inicioProcesso = time.time()
     """Processa os dados da planilha principal e mescla com nomes científicos."""
     global planilha_principal
@@ -183,12 +191,18 @@ def processar_planilhas():
 
         df_saida = pd.merge(df_saida,df2[["Nome Vulgar","Nome Cientifico","Situacao"]],
                             on="Nome Vulgar", how="left")
-        df_saida.loc[df_saida["Situacao"].str.lower() == "protegida", "Categoria"] = "REM"
-        df_saida.loc[df_saida["DAP"] < 0.5, "Categoria"] = "REM"
-        df_saida.loc[df_saida["DAP"] >= 2, "Categoria"] = "REM"
-        df_saida.loc[df_saida["QF"] == 3, "Categoria"] = "REM"
-        df_saida.loc[df_saida["Nome Cientifico"].isna() | (df_saida["Nome Cientifico"]== "") , "Nome Cientifico"] = "Não encontrado"
+        # REM arvores menores que dapmin
+        df_saida.loc[df_saida["DAP"] < DAPmin, "Categoria"] = "REM"
+        # REM arvores menores que dapmax
+        df_saida.loc[df_saida["DAP"] >=  DAPmax, "Categoria"] = "REM"
+        # REM arvores iguais a qf
+        df_saida.loc[df_saida["QF"] == QF, "Categoria"] = "REM"
+        if alt > 0:
+            df_saida.loc[df_saida["ALT"] > alt, "Categoria"] = "REM"
 
+        df_saida.loc[df_saida["Nome Cientifico"].isna() | (df_saida["Nome Cientifico"]== "") , "Nome Cientifico"] = "NÃO ENCONTRADO"
+        df_saida.loc[df_saida["Situacao"].isna() | (df_saida["Situacao"]== "") , "Situacao"] = "SEM RESTRIÇÃO"
+        
         #organizando as colunas
         df_saida = df_saida[COLUNAS_SAIDA]
 
@@ -214,16 +228,36 @@ def processar_planilhas():
 
 
 def iniciar_processamento():
+    config = configparser.ConfigParser()
+    config.read('config.ini')
     """Inicia o processamento em uma thread separada."""
-    thread = threading.Thread(target=processar_planilhas)
+    thread = threading.Thread(
+    target=processar_planilhas,
+    args=(
+        float(config.get('DEFAULT', 'dapmax')),
+        float(config.get('DEFAULT', 'dapmin')),
+        int(config.get('DEFAULT', 'qf')),
+        float(config.get('DEFAULT', 'alt'))
+        )
+    )
     thread.daemon = True  # Fecha a thread quando a interface é fechada
     thread.start()
 
+# Função para abrir a janela de valores padrões ao clicar no botão
+def abrir_janela_valores_padroes_callback():
+    # Abre a janela de valores padrões e bloqueia a janela principal
+    janela_padrao = abrir_janela_valores_padroes(app)
+    
+    # Aguarda até que a janela secundária seja fechada
+    app.wait_window(janela_padrao)
+    
+    
 
 # Interface gráfica
 app = tk.Tk()
 app.title("IFDIGITAL 3.0")
-app.geometry("900x700")
+app.geometry("800x900")
+
 
 entrada1_var = tk.StringVar()
 entrada2_var = tk.StringVar()
@@ -241,11 +275,11 @@ ttk.Label(frame_inputs, text="Arquivo 2: Planilha Secundária").grid(row=1, colu
 ttk.Entry(frame_inputs, textvariable=entrada2_var, width=60).grid(row=1, column=1, pady=5, padx=5)
 ttk.Button(frame_inputs, text="Selecionar", command=lambda: selecionar_arquivos("secundaria")).grid(row=1, column=2, padx=5)
 #ttk.Button(frame_inputs, text="Novo Botão", command=lambda:abrir_janela_valores_padroes(root) ).grid(row=2, column=1, pady=10, padx=5)  # Botão abaixo dos inputs
-botao_modificar_filtro = tk.Button(app, text="Novo Botão", command=lambda:abrir_janela_valores_padroes )
+
+botao_modificar_filtro = tk.Button(app, text="Modfificar Filtragem para REM", command=abrir_janela_valores_padroes_callback)
 botao_modificar_filtro.pack(pady=5)
 
-frame_dados_de_Filtragem = ttk.LabelFrame(app, text="Dados de Filtragem", padding=(10,10))
-frame_dados_de_Filtragem.pack(fill="x", pady=10, padx=10)
+
 
 status_label = ttk.Label(app, text="")
 
