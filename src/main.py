@@ -19,6 +19,8 @@ nomes_selecionados = []  # Lista para manter a ordem dos nomes selecionados
 start_total = None
 
 
+
+
 # Colunas de entrada e saída
 COLUNAS_ENTRADA = [
     "Folha", "Secção", "UT", "Faixa", "Placa", "Cod.", "Nome Vulgar", "CAP", "ALT", "QF",
@@ -27,7 +29,7 @@ COLUNAS_ENTRADA = [
 
 COLUNAS_SAIDA = [
     "UT", "Faixa", "Placa", "Nome Vulgar", "Nome Cientifico", "CAP", "ALT", "QF", "X", "Y",
-    "DAP", "Volume_m3", "Latitude", "Longitude", "DM", "Observacoes", "Categoria", "Situacao"
+    "DAP", "Volume_m3", "Latitude", "Longitude", "DM", "Observacoes", "Categoria", "Situacao","UT_AREA_HA"
 ]
 
 # Funções da Interface e Processamento
@@ -50,9 +52,7 @@ def selecionar_arquivos(tipo):
 
 
 def carregar_planilha_principal(arquivo1):
-    global start_total
-    start_total = time.time() 
-    start_part1 = time.time()
+    
     """Carrega a planilha principal e exibe os nomes vulgares."""
     global planilha_principal, nomes_vulgares
     try:
@@ -72,8 +72,6 @@ def carregar_planilha_principal(arquivo1):
         tk.messagebox.showerror("Erro", f"Erro ao carregar a planilha principal: {e}")
     finally:
         status_label.pack_forget()
-        end_part1 = time.time()
-        print(f"Tempo para carregar a planilha principal: {end_part1 - start_part1:.2f} segundos")
 
 def carregar_planilha_secundaria(arquivo2):
     """Carrega a planilha secundária em segundo plano."""
@@ -92,13 +90,18 @@ def atualizar_listbox_nomes(filtro):
         if filtro.lower() in nome.lower():
             listbox_nomes_vulgares.insert(tk.END, nome)
 
-
+    
 def atualizar_listbox_selecionados():
     """Atualiza a Listbox com os nomes selecionados."""
     listbox_selecionados.delete(0, tk.END)
     for nome in nomes_selecionados:
         listbox_selecionados.insert(tk.END, nome)
 
+def selecionar_todos():
+    """Seleciona todos os nomes vulgares e os adiciona à lista de selecionados."""
+    global nomes_selecionados
+    nomes_selecionados = nomes_vulgares[:]  # Copia todos os nomes
+    atualizar_listbox_selecionados()  # Atualiza a listbox dos selecionados
 
 def pesquisar_nomes(event):
     """Callback para filtrar nomes com base na pesquisa."""
@@ -136,7 +139,7 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
 
     inicioProcesso = time.time()
     """Processa os dados da planilha principal e mescla com nomes científicos."""
-    global planilha_principal
+    global planilha_principal, nomes_selecionados
 
     arquivo2 = entrada2_var.get()
 
@@ -151,6 +154,7 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
         return
 
     try:
+
         # Código do processamento
         df_saida = pd.DataFrame()
 
@@ -169,7 +173,9 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
             "Latitude": "Latitude",
             "Longitude": "Longitude",
             "DM": "DM",
-            "Observações": "Observacoes"
+            "Observações": "Observacoes",
+            "UT_AREA_HA" : "UT_AREA_HA",
+            "UT_ID" : "UT_ID"
         }.items():
             if entrada in planilha_principal.columns:
                 df_saida[saida] = planilha_principal[entrada]
@@ -191,18 +197,67 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
 
         df_saida = pd.merge(df_saida,df2[["Nome Vulgar","Nome Cientifico","Situacao"]],
                             on="Nome Vulgar", how="left")
-        # REM arvores menores que dapmin
-        df_saida.loc[df_saida["DAP"] < DAPmin, "Categoria"] = "REM"
-        # REM arvores menores que dapmax
-        df_saida.loc[df_saida["DAP"] >=  DAPmax, "Categoria"] = "REM"
-        # REM arvores iguais a qf
-        df_saida.loc[df_saida["QF"] == QF, "Categoria"] = "REM"
-        if alt > 0:
-            df_saida.loc[df_saida["ALT"] > alt, "Categoria"] = "REM"
-
         df_saida.loc[df_saida["Nome Cientifico"].isna() | (df_saida["Nome Cientifico"]== "") , "Nome Cientifico"] = "NÃO ENCONTRADO"
-        df_saida.loc[df_saida["Situacao"].isna() | (df_saida["Situacao"]== "") , "Situacao"] = "SEM RESTRIÇÃO"
+        df_saida.loc[df_saida["Situacao"].isna() | (df_saida["Situacao"] == ""), "Situacao"] = "SEM RESTRIÇÃO"
+        if nomes_selecionados:
+
+            nomes_selecionados = [nome.upper() for nome in nomes_selecionados]
+
+            df_saida["Categoria"] = df_saida["Nome Vulgar"].apply(
+            lambda nome: "REM" if nome not in nomes_selecionados else "CORTE"
+            )
+
+            def filtrar_REM(row, DAPmin, DAPmax, QF, alt):
+
+                # # Atualizar a coluna "Categoria" com "REM" se a situação for "protegida"
+                situacao = str(row["Situacao"]).strip().lower() if pd.notna(row["Situacao"]) else ""
+
+                # Se for protegida, marcar como REM
+                if situacao == "protegida":
+                    return "REM"
+
+                # Se o DAP for menor que DAPmin ou maior/igual a DAPmax, marcar como REM
+                if row["DAP"] < DAPmin or row["DAP"] >= DAPmax:
+                    return "REM"
+
+                # Se QF for igual ao valor definido, marcar como REM
+                if row["QF"] == QF:
+                    return "REM"
+
+                # Se alt > 0 e ALT for maior que alt, marcar como REM
+                if alt > 0 and row["ALT"] > alt:
+                    return "REM"
+
+                # Se nenhuma condição foi atendida, mantém a categoria original
+                return row["Categoria"]
+
+            # Aplicando a função ao DataFrame
+            df_saida["Categoria"] = df_saida.apply(lambda row: filtrar_REM(row, DAPmin, DAPmax, QF, alt), axis=1) 
+        #mesclagem da ut_area_ha com ut
+
+        df_saida = pd.merge(
+            df_saida,
+            planilha_principal[["UT_ID", "UT_AREA_HA"]].drop_duplicates(),
+            left_on="UT",
+            right_on="UT_ID",
+            how="left",
+            suffixes=("", "_principal")
+        )
+
+        # Atualizar as colunas para evitar duplicações
+        df_saida["UT_ID"] = df_saida["UT_ID_principal"]
+        df_saida["UT_AREA_HA"] = df_saida["UT_AREA_HA_principal"]
+
+        # Remover as colunas duplicadas
+        df_saida.drop(columns=["UT_ID_principal", "UT_AREA_HA_principal"], inplace=True)
+
+        # Verificar o resultado final
+        print(df_saida[["UT", "UT_ID", "UT_AREA_HA"]].drop_duplicates())
         
+        #indice de raridade e classificação de substituta 
+        ####
+
+
         #organizando as colunas
         df_saida = df_saida[COLUNAS_SAIDA]
 
@@ -211,17 +266,13 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
         print(f"Processamento realizado em {finalProcesso - inicioProcesso:.2f} s")
 
         inicioTimeSalvar = time.time()
+
         #salvar o arquivo no diretório
         diretorio = os.path.dirname(entrada1_var.get())
         arquivo_saida = os.path.join(diretorio, "Planilha Processada - IFDIGITAL 3.0.xlsx")
         df_saida.to_excel(arquivo_saida,index=False,engine="xlsxwriter")
         finalTimeSalvar = time.time()
-        print(f" arquico salvo em {finalTimeSalvar - inicioTimeSalvar:.2f} s")
-
-        end_total = time.time()
-        tempoTotal = end_total - start_total
-        print(f"Processamento realizado em {tempoTotal:.2f} s")
-        tk.messagebox.showinfo("SUCESSO",f" Processamento realizado em {tempoTotal:.2f} segundos")
+        tk.messagebox.showinfo("SUCESSO",f" Processamento realizado em {finalProcesso - inicioProcesso:.2f} segundos e o  arquivo salvo em {finalTimeSalvar - inicioTimeSalvar:.2f} s ")
 
     except Exception as e:
         tk.messagebox.showerror("Erro", f"Erro ao processar as planilhas: {e}")
@@ -298,6 +349,7 @@ listbox_nomes_vulgares.grid(row=1, column=0, padx=10, pady=10)
 listbox_selecionados = tk.Listbox(frame_listbox, width=40, height=20)
 listbox_selecionados.grid(row=1, column=1, padx=10, pady=10)
 
+ttk.Button(frame_listbox, text="Selecionar Todos", command=selecionar_todos).grid(row=3, column=0, pady=10, padx=5)
 ttk.Button(frame_listbox, text="Remover Último", command=remover_ultimo_selecionado).grid(row=2, column=0, pady=10)
 ttk.Button(frame_listbox, text="Limpar Lista", command=limpar_lista_selecionados).grid(row=2, column=1, pady=10)
 
