@@ -257,6 +257,26 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
         #indice de raridade e classificação de substituta 
         ####
 
+        # **Filtrar apenas as espécies selecionadas e que estão na categoria CORTE**
+        df_filtrado = df_saida[(df_saida["Categoria"] == "CORTE") & (df_saida["Nome Vulgar"].isin(nomes_selecionados))]
+
+        # **Contar quantas vezes cada Nome Vulgar aparece**
+        contagem_especies = df_filtrado["Nome Vulgar"].value_counts()
+
+        # **Criar um DataFrame para exibir os resultados**
+        df_contagem = pd.DataFrame({"Nome Vulgar": contagem_especies.index, "Quantidade": contagem_especies.values})
+
+        # **Exibir os resultados**
+        print(df_contagem)
+
+        def definir_sbustituta_vuneravel(row,listaN):
+            
+
+            if row["Categoria"] == "CORTE" and row["Nome Vulgar"] in listaN and row["QF"] :
+                return "SUBSTITUTA"
+            return row["Categoria"]
+
+        df_saida["Categoria"] = df_saida.apply(lambda row: definir_sbustituta_vuneravel(row,nomes_selecionados), axis = 1  )
 
         #organizando as colunas
         df_saida = df_saida[COLUNAS_SAIDA]
