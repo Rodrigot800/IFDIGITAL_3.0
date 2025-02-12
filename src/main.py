@@ -7,6 +7,7 @@ import time
 from pacotes.edicaoValorFiltro import  abrir_janela_valores_padroes,valor1,valor2,valor3,valor4
 import os
 import configparser
+import numpy as np
 config = configparser.ConfigParser()
 config.read('config.ini')
 
@@ -195,17 +196,19 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
         df2["Nome Vulgar"] = df2["Nome Vulgar"].str.strip().str.upper()
         df2["Nome Cientifico"] = df2["Nome Cientifico"].str.strip().str.upper()
 
+        df2 = df2.drop_duplicates(subset=["Nome Vulgar"])
         df_saida = pd.merge(df_saida,df2[["Nome Vulgar","Nome Cientifico","Situacao"]],
                             on="Nome Vulgar", how="left")
         df_saida.loc[df_saida["Nome Cientifico"].isna() | (df_saida["Nome Cientifico"]== "") , "Nome Cientifico"] = "NÃO ENCONTRADO"
         df_saida.loc[df_saida["Situacao"].isna() | (df_saida["Situacao"] == ""), "Situacao"] = "SEM RESTRIÇÃO"
         if nomes_selecionados:
-
+        
             nomes_selecionados = [nome.upper() for nome in nomes_selecionados]
 
             df_saida["Categoria"] = df_saida["Nome Vulgar"].apply(
             lambda nome: "REM" if nome not in nomes_selecionados else "CORTE"
             )
+
 
             def filtrar_REM(row, DAPmin, DAPmax, QF, alt):
 
@@ -244,6 +247,7 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
             suffixes=("", "_principal")
         )
 
+
         # Atualizar as colunas para evitar duplicações
         df_saida["UT_ID"] = df_saida["UT_ID_principal"]
         df_saida["UT_AREA_HA"] = df_saida["UT_AREA_HA_principal"]
@@ -252,35 +256,151 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
         df_saida.drop(columns=["UT_ID_principal", "UT_AREA_HA_principal"], inplace=True)
 
         # Verificar o resultado final
-        print(df_saida[["UT", "UT_ID", "UT_AREA_HA"]].drop_duplicates())
+        #print(df_saida[["UT", "UT_ID", "UT_AREA_HA"]].drop_duplicates())
         
         #indice de raridade e classificação de substituta 
-        ####
+        ####----------------------
 
-        # **Filtrar apenas as espécies selecionadas e que estão na categoria CORTE**
-        df_filtrado = df_saida[(df_saida["Categoria"] == "CORTE") & (df_saida["Nome Vulgar"].isin(nomes_selecionados))]
+        # **Filtrar apenas as espécies selecionadas**
+        df_filtrado = df_saida[(df_saida["Nome Vulgar"].isin(nomes_selecionados))]
+        
+        # **Contar quantas vezes cada Nome Vulgar aparece por UT**
+        df_contagem = df_filtrado.groupby(["UT", "Nome Vulgar"], as_index=False).size()
 
-        # **Contar quantas vezes cada Nome Vulgar aparece**
-        contagem_especies = df_filtrado["Nome Vulgar"].value_counts()
+        # **Renomear a coluna de contagem**
+        df_contagem.columns = ["UT", "Nome Vulgar", "Quantidade"]
 
-        # **Criar um DataFrame para exibir os resultados**
-        df_contagem = pd.DataFrame({"Nome Vulgar": contagem_especies.index, "Quantidade": contagem_especies.values})
+        # **Fazer merge para trazer Situacao e UT_AREA_HA**
+        df_contagem = df_contagem.merge(
+            df_saida[["UT", "Nome Vulgar", "Situacao", "UT_AREA_HA"]].drop_duplicates(), 
+            on=["UT", "Nome Vulgar"], 
+            how="left"
+        )
 
-        # **Exibir os resultados**
-        print(df_contagem)
+        # **Exibir os primeiros resultados**
+        #print(df_contagem)
+        
+        # **Definir a função de substituição**
+        def definir_sbustituta_vuneravel(quantidade, Situacao, area_hect):
+            if Situacao == "SEM RESTRIÇÃO":
+                x = np.ceil(quantidade * 0.1)
+                y = np.ceil(area_hect * 0.03)
+                return max(x, y)
 
-        def definir_sbustituta_vuneravel(row,listaN):
+            if Situacao == "VULNERÁVEL":
+                x = np.ceil(quantidade * 0.15)
+                y = np.ceil(area_hect * 0.04)
+                return max(x, y)
             
+            return 0  # Se não for vulnerável nem sem restrição, retorna 0
 
-            if row["Categoria"] == "CORTE" and row["Nome Vulgar"] in listaN and row["QF"] :
-                return "SUBSTITUTA"
-            return row["Categoria"]
+        # **Aplicar a função para calcular o valor de substituição**
+        df_contagem["Valor_Substituta"] = df_contagem.apply(
+            lambda row: definir_sbustituta_vuneravel(row["Quantidade"], row["Situacao"], row["UT_AREA_HA"]), 
+            axis=1
+        )
 
-        df_saida["Categoria"] = df_saida.apply(lambda row: definir_sbustituta_vuneravel(row,nomes_selecionados), axis = 1  )
+        # **Exibir os resultados finais**
+        #print(df_contagem)
 
+        ##### Classificar Substitutas 
+        # Filtrar apenas as árvores que estão como CORTE e com Nome Vulgar nos selecionados
+        df_filtrado = df_saida[
+            (df_saida["Categoria"] == "CORTE") & 
+            (df_saida["Nome Vulgar"].isin(nomes_selecionados))
+        ].copy()
+
+        # Ordenar por UT, QF (maior para menor) e Volume_m3 (menor para maior)
+        df_filtrado.sort_values(by=["UT", "QF", "Volume_m3"], ascending=[True, False, True], inplace=True)
+
+        # Garantir que df_contagem tenha apenas uma linha por UT e Nome Vulgar
+        df_contagem_agg = df_contagem.groupby(["UT", "Nome Vulgar"], as_index=False).agg({"Valor_Substituta": "sum"})
+
+        # Mesclar com df_contagem_agg para garantir que a quantidade de substitutas seja específica para cada UT e Nome Vulgar
+        df_filtrado = df_filtrado.merge(df_contagem_agg, on=["UT", "Nome Vulgar"], how="left")
+
+        print("\n--- Validação: df_filtrado após o merge ---")
+        print(df_filtrado.head())
+
+        # Função para definir as árvores substitutas corretamente
+        def definir_substituta(df):
+            df["Marcador"] = False  # Criar coluna auxiliar para marcar substitutas
+
+            # Iterar por UT e Nome Vulgar
+            for (ut, nome), grupo in df.groupby(["UT", "Nome Vulgar"]):
+                quantidade_substituir = grupo["Valor_Substituta"].iloc[0]  # Obter a quantidade correta
+
+                # Garantir que não substituímos mais do que o disponível no grupo
+                if pd.notna(quantidade_substituir) and quantidade_substituir > 0:
+                    quantidade_substituir = min(int(quantidade_substituir), len(grupo))
+                    indices_para_substituir = grupo.index[:quantidade_substituir]
+                    df.loc[indices_para_substituir, "Marcador"] = True
+
+            # Aplicar a substituição apenas para os marcados
+            df.loc[df["Marcador"], "Categoria"] = "SUBSTITUTA"
+            df.drop(columns=["Marcador"], inplace=True)
+
+            return df
+
+        # Aplicar a função para categorizar corretamente como SUBSTITUTA
+        df_filtrado = definir_substituta(df_filtrado)
+
+        # Filtrar apenas os registros que realmente foram substituídos
+        df_substituta = df_filtrado[df_filtrado["Categoria"] == "SUBSTITUTA"][["UT", "Nome Vulgar", "Categoria"]]
+
+        print("\n--- df_substituta (Apenas os registros que devem ser SUBSTITUTA) ---")
+        print(df_substituta.drop_duplicates())
+
+        # Atualizar SOMENTE os registros corretos em df_saida
+        # Evitar conflitos mantendo índices consistentes
+        df_saida.set_index(["UT", "Nome Vulgar", "Faixa", "Placa"], inplace=True)
+        df_filtrado.set_index(["UT", "Nome Vulgar", "Faixa", "Placa"], inplace=True)
+
+        # Somente substituir onde há correspondência exata
+        df_saida.update(df_filtrado["Categoria"])
+
+        # Resetar índice após atualização
+        df_saida.reset_index(inplace=True)
+
+        ####
+        # **Contar a quantidade de árvores "CORTE" por UT e Nome Vulgar**
+        df_contagem_corte = df_saida[df_saida["Categoria"] == "CORTE"].groupby(["UT", "Nome Vulgar"], as_index=False).size()
+        df_contagem_corte.rename(columns={"size": "Qtd_Corte"}, inplace=True)
+
+        # **Mesclar com a contagem de cortes para verificar onde não há mais cortes**
+        df_verificacao = df_substituta.merge(df_contagem_corte, on=["UT", "Nome Vulgar"], how="left").fillna(0)
+
+        # **Criar um identificador para marcar onde NÃO EXISTE "CORTE"**
+        df_verificacao["Marcar_REM"] = df_verificacao["Qtd_Corte"] == 0
+
+        # **Criar uma lista de tuplas (UT, Nome Vulgar) onde as substitutas precisam virar REM**
+        remover_tuplas = df_verificacao[df_verificacao["Marcar_REM"]][["UT", "Nome Vulgar"]].apply(tuple, axis=1).tolist()
+
+        # **Atualizar df_saida para transformar "SUBSTITUTA" em "REM" onde não há cortes**
+        df_saida["Categoria"] = df_saida.apply(
+            lambda row: "REM" if (row["UT"], row["Nome Vulgar"]) in remover_tuplas and row["Categoria"] == "SUBSTITUTA" else row["Categoria"],
+            axis=1
+        )
+
+        # **Verificar os resultados corrigidos**
+        print("\n--- Linhas que viraram REM porque não há mais CORTE dentro da UT ---")
+        print(df_saida[df_saida["Categoria"] == "REM"][["UT", "Nome Vulgar", "Categoria"]].drop_duplicates())
+
+        print("\n--- Contagem Final por Categoria ---")
+        print(df_saida["Categoria"].value_counts())
+
+
+        contagem_categorias = df_saida["Categoria"].value_counts()
+
+        print("Contagem por Categoria:")
+        print(f"CORTE: {contagem_categorias.get('CORTE', 0)}")
+        print(f"SUBSTITUTA: {contagem_categorias.get('SUBSTITUTA', 0)}")
+        print(f"REM: {contagem_categorias.get('REM', 0)}")
+
+        print(f"Numero total de linhas em df_saida: {len(df_saida)}")
         #organizando as colunas
         df_saida = df_saida[COLUNAS_SAIDA]
-
+        
 
         finalProcesso = time.time()
         print(f"Processamento realizado em {finalProcesso - inicioProcesso:.2f} s")
@@ -329,6 +449,20 @@ app = tk.Tk()
 app.title("IFDIGITAL 3.0")
 app.geometry("800x900")
 
+
+largura_janela = 800
+altura_janela = 900
+
+# Obter largura e altura da tela
+largura_tela = app.winfo_screenwidth()
+altura_tela = app.winfo_screenheight()
+
+# Calcular coordenadas para centralizar a janela
+pos_x = (largura_tela - largura_janela) // 2
+pos_y = (altura_tela - altura_janela) // 2
+
+# Definir a geometria da janela com posição centralizada
+app.geometry(f"{largura_janela}x{altura_janela}+{pos_x}+{pos_y}")
 
 entrada1_var = tk.StringVar()
 entrada2_var = tk.StringVar()
