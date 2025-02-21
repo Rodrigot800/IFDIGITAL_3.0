@@ -261,21 +261,25 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
         #indice de raridade e classificação de substituta 
         ####----------------------
 
-        # **Filtrar apenas as espécies selecionadas**
-        df_filtrado = df_saida[(df_saida["Nome Vulgar"].isin(nomes_selecionados))]
-        
+        # **Filtrar apenas as espécies selecionadas que também estão classificadas como "CORTE"**
+        df_filtrado = df_saida[
+            (df_saida["Nome Vulgar"].isin(nomes_selecionados)) & 
+            (df_saida["Categoria"] == "CORTE")  # Apenas árvores marcadas como CORTE
+        ]
+
         # **Contar quantas vezes cada Nome Vulgar aparece por UT**
         df_contagem = df_filtrado.groupby(["UT", "Nome Vulgar"], as_index=False).size()
 
         # **Renomear a coluna de contagem**
         df_contagem.columns = ["UT", "Nome Vulgar", "Quantidade"]
 
-        # **Fazer merge para trazer Situacao e UT_AREA_HA**
+        # **Fazer merge para trazer Situação e UT_AREA_HA**
         df_contagem = df_contagem.merge(
             df_saida[["UT", "Nome Vulgar", "Situacao", "UT_AREA_HA"]].drop_duplicates(), 
             on=["UT", "Nome Vulgar"], 
             how="left"
         )
+
 
         # **Exibir os primeiros resultados**
         #print(df_contagem)
@@ -446,6 +450,7 @@ def abrir_janela_valores_padroes_callback():
 
 # Interface gráfica
 app = tk.Tk()
+
 app.title("IFDIGITAL 3.0")
 app.geometry("800x900")
 

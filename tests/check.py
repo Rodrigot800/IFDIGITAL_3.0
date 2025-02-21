@@ -1,3 +1,7 @@
+histpyinstaller --onefile --windowed --hidden-import=openpyxl --hidden-import=pandas --hidden-import=tkinter --hidden-import=configparser --hidden-import=numpy --hidden-import=xlsxwriter --collect-all openpyxl --collect-all pandas --collect-all numpy --collect-all xlsxwriter --icon="icone.ico" main.py
+
+
+
 ##### Classificar Substitutas 
         # **Filtrar apenas as árvores que estão como CORTE e com Nome Vulgar nos selecionados**
         df_filtrado = df_saida[

@@ -3,7 +3,7 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = []
 binaries = []
-hiddenimports = ['openpyxl', 'xlsxwriter', 'pandas', 'tkinter', 'configparser', 'numpy']
+hiddenimports = ['openpyxl', 'pandas', 'tkinter', 'configparser', 'numpy', 'xlsxwriter']
 tmp_ret = collect_all('openpyxl')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('pandas')
