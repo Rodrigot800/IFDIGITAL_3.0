@@ -5,12 +5,13 @@ import threading
 import os
 import time
 from pacotes.edicaoValorFiltro import  abrir_janela_valores_padroes,valor1,valor2,valor3,valor4
+from pacotes.ordemSubstituta import OrdenadorFrame 
 import os
 import configparser
 import numpy as np
 config = configparser.ConfigParser()
 config.read('config.ini')
-
+CONFIG_FILE = 'config.ini'
 
 # Variáveis globais
 planilha_principal = None
@@ -18,8 +19,6 @@ planilha_secundaria = None
 nomes_vulgares = []  # Lista de todos os nomes vulgares
 nomes_selecionados = []  # Lista para manter a ordem dos nomes selecionados
 start_total = None
-
-
 
 
 # Colunas de entrada e saída
@@ -35,10 +34,22 @@ COLUNAS_SAIDA = [
 
 # Funções da Interface e Processamento
 
-def selecionar_arquivos(tipo):
-    """Seleciona os arquivos das planilhas."""
-    global planilha_principal, planilha_secundaria
+def salvar_caminho(tipo, caminho):
+    """Salva o caminho da planilha no arquivo de configuração."""
+    config = configparser.ConfigParser()
+    config.read(CONFIG_FILE)
+    if not config.has_section("Planilha"):
+        config.add_section("Planilha")
+    config.set("Planilha", tipo, caminho)
+    with open(CONFIG_FILE, 'w') as configfile:
+        config.write(configfile)
 
+def selecionar_arquivos(tipo):
+    """
+    Seleciona os arquivos das planilhas e salva o caminho.
+    Caso o usuário selecione um arquivo, atualiza o widget de entrada e inicia o carregamento.
+    """
+    global planilha_principal, planilha_secundaria
     arquivo = filedialog.askopenfilename(
         title=f"Selecione a planilha {'principal' if tipo == 'principal' else 'secundária'}",
         filetypes=(("Arquivos Excel", "*.xlsx"), ("Todos os arquivos", "*.*"))
@@ -50,6 +61,24 @@ def selecionar_arquivos(tipo):
         elif tipo == "secundaria":
             entrada2_var.set(arquivo)
             threading.Thread(target=carregar_planilha_secundaria, args=(arquivo,)).start()
+        salvar_caminho(tipo, arquivo)
+        
+def carregar_planilha_salva(tipo):
+    """
+    Verifica se há um caminho salvo para a planilha do tipo especificado e,
+    se existir, atualiza o widget de entrada e inicia o carregamento em uma thread.
+    Essa função pode ser chamada na inicialização do projeto para carregar automaticamente os caminhos salvos.
+    """
+    config = configparser.ConfigParser()
+    config.read(CONFIG_FILE)
+    caminho_salvo = config.get("Planilha", tipo, fallback="")
+    if caminho_salvo:
+        if tipo == "principal":
+            entrada1_var.set(caminho_salvo)
+            threading.Thread(target=carregar_planilha_principal, args=(caminho_salvo,)).start()
+        elif tipo == "secundaria":
+            entrada2_var.set(caminho_salvo)
+            threading.Thread(target=carregar_planilha_secundaria, args=(caminho_salvo,)).start()
 
 
 def carregar_planilha_principal(arquivo1):
@@ -137,6 +166,12 @@ def limpar_lista_selecionados():
 
 def processar_planilhas(DAPmin,DAPmax,QF,alt):
     
+     # Oculta o botão e exibe/inicia a barra de progresso
+    button_process.pack_forget()
+    progress_bar.pack(pady=10)
+    progress_bar.start(10)
+    app.update_idletasks()  # Garante que a interface seja atualizada
+
 
     inicioProcesso = time.time()
     """Processa os dados da planilha principal e mescla com nomes científicos."""
@@ -314,8 +349,20 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
             (df_saida["Nome Vulgar"].isin(nomes_selecionados))
         ].copy()
 
-        # Ordenar por UT, QF (maior para menor) e Volume_m3 (menor para maior)
-        df_filtrado.sort_values(by=["UT", "QF", "Volume_m3"], ascending=[True, False, True], inplace=True)
+        def ordenar_df():
+            # Obtém o critério de ordenação selecionado
+            criterio = combobox.get()
+            if criterio == "UT, QF (maior para menor) e Volume_m3 (menor para maior)":
+                df_filtrado.sort_values(by=["UT", "QF", "Volume_m3"], ascending=[True, False, True], inplace=True)
+            elif criterio == "UT, Volume_m3 (menor para maior) e QF (maior para menor)":
+                df_filtrado.sort_values(by=["UT", "Volume_m3", "QF"], ascending=[True, True, False], inplace=True)
+            elif criterio == "Apenas QF (maior para menor)":
+                df_filtrado.sort_values(by=["UT", "QF"], ascending=[True, False], inplace=True)
+            elif criterio == "Apenas Volume_m3 (menor para maior)":
+                df_filtrado.sort_values(by=["UT", "Volume_m3"], ascending=[True, True], inplace=True)
+            # Exibe o DataFrame ordenado no console
+            print("DataFrame ordenado:")
+            print(df_filtrado)
 
         # Garantir que df_contagem tenha apenas uma linha por UT e Nome Vulgar
         df_contagem_agg = df_contagem.groupby(["UT", "Nome Vulgar"], as_index=False).agg({"Valor_Substituta": "sum"})
@@ -405,6 +452,7 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
         #organizando as colunas
         df_saida = df_saida[COLUNAS_SAIDA]
         
+        
 
         finalProcesso = time.time()
         print(f"Processamento realizado em {finalProcesso - inicioProcesso:.2f} s")
@@ -416,9 +464,21 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
         arquivo_saida = os.path.join(diretorio, "Planilha Processada - IFDIGITAL 3.0.xlsx")
         df_saida.to_excel(arquivo_saida,index=False,engine="xlsxwriter")
         finalTimeSalvar = time.time()
+
+        # finalizando barra de progresso
+        # Para e esconde a barra de progresso e exibe novamente o botão
+        progress_bar.stop()
+        progress_bar.pack_forget()
+        button_process.pack(pady=10)
+        
         tk.messagebox.showinfo("SUCESSO",f" Processamento realizado em {finalProcesso - inicioProcesso:.2f} segundos e o  arquivo salvo em {finalTimeSalvar - inicioTimeSalvar:.2f} s ")
 
     except Exception as e:
+        # finalizando barra de progresso
+        # Para e esconde a barra de progresso e exibe novamente o botão
+        progress_bar.stop()
+        progress_bar.pack_forget()
+        button_process.pack(pady=10)
         tk.messagebox.showerror("Erro", f"Erro ao processar as planilhas: {e}")
 
 
@@ -486,12 +546,12 @@ ttk.Entry(frame_inputs, textvariable=entrada2_var, width=60).grid(row=1, column=
 ttk.Button(frame_inputs, text="Selecionar", command=lambda: selecionar_arquivos("secundaria")).grid(row=1, column=2, padx=5)
 #ttk.Button(frame_inputs, text="Novo Botão", command=lambda:abrir_janela_valores_padroes(root) ).grid(row=2, column=1, pady=10, padx=5)  # Botão abaixo dos inputs
 
-botao_modificar_filtro = tk.Button(app, text="Modfificar Filtragem para REM", command=abrir_janela_valores_padroes_callback)
+botao_modificar_filtro = tk.Button(app, text="Modificar Filtragem para Substituta", command=abrir_janela_valores_padroes_callback)
 botao_modificar_filtro.pack(pady=5)
 
-
-
-status_label = ttk.Label(app, text="")
+# Criação dos widgets que serão atualizados
+status_label = ttk.Label(app, text="")  # Inicialmente vazio
+status_label.pack(pady=10)
 
 # Frame para Listboxes
 frame_listbox = ttk.LabelFrame(app, text="Seleção de Nomes Vulgares", padding=(10, 10))
@@ -514,9 +574,15 @@ ttk.Button(frame_listbox, text="Limpar Lista", command=limpar_lista_selecionados
 
 # Frame para o botão de processamento
 frame_secundario = ttk.Frame(app, padding=(10, 10))
-ttk.Button(frame_secundario, text="Processar Planilhas", command=iniciar_processamento, width=40).pack(pady=10)
+button_process = ttk.Button(frame_secundario, text="Processar Planilhas", command=iniciar_processamento, width=40)
+button_process.pack(pady=10)
 
+# Barra de progresso (inicialmente não exibida)
+progress_bar = ttk.Progressbar(frame_secundario, mode='indeterminate', length=300)
 frame_listbox.pack_forget()  # Inicialmente escondido
 frame_secundario.pack_forget()  # Inicialmente escondido
+
+carregar_planilha_salva("principal")
+carregar_planilha_salva("secundaria")
 
 app.mainloop()

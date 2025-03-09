@@ -9,20 +9,14 @@ valor4 = None
 
 # Função para carregar os valores do arquivo de configuração
 def carregar_valores():
-    global valor1, valor2, valor3, valor4  # Definindo que vamos usar as variáveis globais
+    global valor1, valor2, valor3, valor4  # Usando as variáveis globais
     config = configparser.ConfigParser()
     try:
         config.read('config.ini')
-        # Atribuindo os valores lidos ao invés de declarar locais
         valor1 = config.get('DEFAULT', 'dapmax', fallback="0.5")
         valor2 = config.get('DEFAULT', 'dapmin', fallback="2.0")
         valor3 = config.get('DEFAULT', 'qf', fallback="3")
         valor4 = config.get('DEFAULT', 'alt', fallback="0")
-
-        # print(f"Valor 1: {valor1}")
-        # print(f"Valor 2: {valor2}")
-        # print(f"Valor 3: {valor3}")
-        # print(f"Valor 4: {valor4}")
     except FileNotFoundError:
         valor1 = "0.5"
         valor2 = "2.0"
@@ -45,69 +39,105 @@ def salvar_valores(valor1, valor2, valor3, valor4):
         config.write(configfile)
 
 def abrir_janela_valores_padroes(root):
-    """Abre uma nova janela com inputs de valores padrão e bloqueia a janela principal."""    
     global valor1, valor2, valor3, valor4
-    # Carregar os valores do arquivo de configuração
-    carregar_valores()  # Agora as variáveis globais valor1, valor2, valor3 e valor4 serão preenchidas corretamente
+    carregar_valores()  # Carrega os valores e preenche as variáveis globais
 
-    # Função para confirmar os valores inseridos
     def confirmar_valores():
-        """Função executada ao clicar no botão 'Confirmar'."""
         global valor1, valor2, valor3, valor4
-
-        # Atualiza as variáveis globais com os novos valores
         valor1 = input_valor1.get()
         valor2 = input_valor2.get()
         valor3 = input_valor3.get()
-        valor4 = input_valor4.get()
-
-        # Exibe os valores no terminal
-        
-        
-        # Salva os valores no arquivo de configuração
+        if toggle_alt.get() == 1:
+            valor4 = input_valor4.get()
+        else:
+            valor4 = "0"
         salvar_valores(valor1, valor2, valor3, valor4)
-
-        # Fecha a janela ao confirmar
         janela_padrao.destroy()
 
-    # Criando a janela de valores padrões
+    # Cria a janela de configurações
     janela_padrao = tk.Toplevel(root)
     janela_padrao.title("Critérios para REM")
     janela_padrao.geometry("400x500")
-    janela_padrao.resizable(False, False)  # Impede o redimensionamento da janela
+    janela_padrao.resizable(False, False)
+    janela_padrao.transient(root)
+    janela_padrao.grab_set()
 
-    # Bloqueia a janela principal enquanto a janela secundária estiver aberta
-    janela_padrao.transient(root)  # A janela secundária estará "associada" à janela principal
-    janela_padrao.grab_set()  # Bloqueia a interação com a janela principal
+    # Frame para os inputs principais
+    frame_inputs = tk.Frame(janela_padrao)
+    frame_inputs.pack(pady=10, fill='both', expand=True)
 
-    # Adiciona campos de entrada de dados
-    tk.Label(janela_padrao, text="DAP < :", font=("Arial", 12)).pack(pady=5)
-    input_valor1 = tk.Entry(janela_padrao, font=("Arial", 12))
-    input_valor1.insert(0, valor1)  # Carrega o valor salvo no arquivo
+    # Input para DAP <
+    tk.Label(frame_inputs, text="DAP < :", font=("Arial", 12)).pack(pady=5)
+    input_valor1 = tk.Entry(frame_inputs, font=("Arial", 12))
+    input_valor1.insert(0, valor1)
     input_valor1.pack(pady=5)
 
-    tk.Label(janela_padrao, text="DAP >= :", font=("Arial", 12)).pack(pady=5)
-    input_valor2 = tk.Entry(janela_padrao, font=("Arial", 12))
-    input_valor2.insert(0, valor2)  # Carrega o valor salvo no arquivo
+    # Input para DAP >=
+    tk.Label(frame_inputs, text="DAP >= :", font=("Arial", 12)).pack(pady=5)
+    input_valor2 = tk.Entry(frame_inputs, font=("Arial", 12))
+    input_valor2.insert(0, valor2)
     input_valor2.pack(pady=5)
 
-    tk.Label(janela_padrao, text="QF :", font=("Arial", 12)).pack(pady=5)
-    input_valor3 = tk.Entry(janela_padrao, font=("Arial", 12))
-    input_valor3.insert(0, valor3)  # Carrega o valor salvo no arquivo
+    # Input para QF
+    tk.Label(frame_inputs, text="QF :", font=("Arial", 12)).pack(pady=5)
+    input_valor3 = tk.Entry(frame_inputs, font=("Arial", 12))
+    input_valor3.insert(0, valor3)
     input_valor3.pack(pady=5)
 
-    tk.Label(janela_padrao, text="ALT  > :", font=("Arial", 12)).pack(pady=5)
-    input_valor4 = tk.Entry(janela_padrao, font=("Arial", 12))
-    input_valor4.insert(0, valor4)  # Carrega o valor salvo no arquivo
+    # Container para os controles do ALT (checkbutton e input)
+    frame_alt_container = tk.Frame(frame_inputs)
+    frame_alt_container.pack(pady=5, fill='x')
+
+    toggle_alt = tk.IntVar()
+    if valor4 != "0":
+        toggle_alt.set(1)
+    else:
+        toggle_alt.set(0)
+    
+    checkbutton_alt = tk.Checkbutton(
+        frame_alt_container,
+        text="ALT > :",
+        variable=toggle_alt,
+        font=("Arial", 12)
+    )
+    checkbutton_alt.pack(pady=5)
+
+    # Frame para o campo ALT
+    frame_alt = tk.Frame(frame_alt_container)
+    input_valor4 = tk.Entry(frame_alt, font=("Arial", 12))
+    input_valor4.insert(0, valor4)
     input_valor4.pack(pady=5)
 
-    # Botão de confirmação
+    # Função para alternar a visibilidade do campo ALT
+    def toggle_alt_input():
+        if toggle_alt.get() == 1:
+            frame_alt.pack(pady=5, fill='x')
+        else:
+            frame_alt.pack_forget()
+            input_valor4.delete(0, tk.END)
+            input_valor4.insert(0, "0")
+    
+    # Associa a função ao checkbutton
+    checkbutton_alt.config(command=toggle_alt_input)
+    # Exibe o campo ALT se estiver ativo inicialmente
+    if toggle_alt.get() == 1:
+        frame_alt.pack(pady=5, fill='x')
+
+    # Frame para o botão de confirmação (fixo no final)
+    frame_confirm = tk.Frame(janela_padrao)
+    frame_confirm.pack(pady=10)
     tk.Button(
-        janela_padrao,
+        frame_confirm,
         text="Confirmar",
         font=("Arial", 12),
         bg="lightblue",
         command=confirmar_valores,
         width=12,
         height=2,
-    ).pack(pady=10)
+    ).pack()
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.title("Janela Principal")
+    tk.Button(root, text="Abrir Configurações", command=lambda: abrir_janela_valores_padroes(root)).pack(pady=20)
+    root.mainloop()
