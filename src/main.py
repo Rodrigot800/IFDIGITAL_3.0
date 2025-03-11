@@ -572,6 +572,10 @@ ttk.Button(frame_listbox, text="Selecionar Todos", command=selecionar_todos).gri
 ttk.Button(frame_listbox, text="Remover Último", command=remover_ultimo_selecionado).grid(row=2, column=0, pady=10)
 ttk.Button(frame_listbox, text="Limpar Lista", command=limpar_lista_selecionados).grid(row=2, column=1, pady=10)
 
+
+
+
+
 # Frame para o botão de processamento
 frame_secundario = ttk.Frame(app, padding=(10, 10))
 button_process = ttk.Button(frame_secundario, text="Processar Planilhas", command=iniciar_processamento, width=40)

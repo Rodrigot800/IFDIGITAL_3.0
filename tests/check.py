@@ -1,66 +1,67 @@
-histpyinstaller --onefile --windowed --hidden-import=openpyxl --hidden-import=pandas --hidden-import=tkinter --hidden-import=configparser --hidden-import=numpy --hidden-import=xlsxwriter --collect-all openpyxl --collect-all pandas --collect-all numpy --collect-all xlsxwriter --icon="icone.ico" main.py
+import tkinter as tk
+from tkinter import ttk
 
+def on_item_double_click(event):
+    """Abre uma janela de edição para a linha selecionada."""
+    selected_item = tree.focus()
+    if not selected_item:
+        return
 
+    # Recupera os valores da linha selecionada
+    values = tree.item(selected_item, "values")
 
-##### Classificar Substitutas 
-        # **Filtrar apenas as árvores que estão como CORTE e com Nome Vulgar nos selecionados**
-        df_filtrado = df_saida[
-            (df_saida["Categoria"] == "CORTE") & 
-            (df_saida["Nome Vulgar"].isin(nomes_selecionados))
-        ].copy()
+    # Cria uma nova janela para edição
+    edit_window = tk.Toplevel(root)
+    edit_window.title("Editar Dados da Linha")
+    edit_window.geometry("400x300")
 
-        # **Ordenar: por UT, QF (maior para menor) e Volume_m3 (menor para maior)**
-        df_filtrado.sort_values(by=["UT", "QF", "Volume_m3"], ascending=[True, False, True], inplace=True)
+    # Dicionário para guardar os Entry widgets por coluna
+    entries = {}
 
-        # **Garantir que df_contagem tenha apenas uma linha por UT e Nome Vulgar**
-        df_contagem_agg = df_contagem.groupby(["UT", "Nome Vulgar"], as_index=False).agg({"Valor_Substituta": "sum"})
+    # Cria um Label e um Entry para cada coluna
+    for i, col in enumerate(colunas):
+        tk.Label(edit_window, text=col + ":").grid(row=i, column=0, padx=10, pady=5, sticky="w")
+        entry = tk.Entry(edit_window, width=30)
+        entry.grid(row=i, column=1, padx=10, pady=5)
+        entry.insert(0, values[i])
+        entries[col] = entry
 
-        # **Mesclar com df_contagem_agg para garantir que a quantidade de substitutas seja específica para cada UT e Nome Vulgar**
-        df_filtrado = df_filtrado.merge(
-            df_contagem_agg,  # Usamos a versão agregada da contagem
-            on=["UT", "Nome Vulgar"],
-            how="left"
-        )
+    # Função para salvar as alterações
+    def salvar_alteracoes():
+        # Coleta os novos valores dos campos
+        new_values = tuple(entries[col].get() for col in colunas)
+        # Atualiza o item na Treeview
+        tree.item(selected_item, values=new_values)
+        edit_window.destroy()
 
-        # Exibir os primeiros resultados para validar a junção
-        print("\n--- Validação: df_filtrado após o merge ---")
-        print(df_filtrado.head())
+    # Botão para salvar alterações
+    tk.Button(edit_window, text="Salvar Alterações", command=salvar_alteracoes).grid(row=len(colunas), column=0, columnspan=2, pady=10)
 
-        # **Função para definir as árvores substitutas corretamente**
-        def definir_substituta(df):
-            df["Marcador"] = False  # Criar coluna auxiliar para identificar as árvores que serão substituídas
+# Criação da janela principal
+root = tk.Tk()
+root.title("Tabela com Edição")
+root.geometry("800x400")
 
-            # Iterar por UT e Nome Vulgar
-            for (ut, nome), grupo in df.groupby(["UT", "Nome Vulgar"]):
-                quantidade_substituir = grupo["Valor_Substituta"].iloc[0]  # Obter a quantidade correta para esta UT e Nome Vulgar
+# Frame para conter o Treeview
+frame = ttk.Frame(root)
+frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-                if pd.notna(quantidade_substituir) and quantidade_substituir > 0:
-                    indices_para_substituir = grupo.index[:int(quantidade_substituir)]  # Selecionar os primeiros X indivíduos para substituição
-                    df.loc[indices_para_substituir, "Marcador"] = True  # Marcar os que devem ser substituídos
+# Definição das colunas para a tabela
+colunas = ("Nome", "DAP <", "DAP", "DAP >=", "QF", "ALT >", "CAP <")
 
-            # Aplicar a substituição apenas para os marcados
-            df.loc[df["Marcador"], "Categoria"] = "SUBSTITUTA"
-            df.drop(columns=["Marcador"], inplace=True)  # Remover a coluna auxiliar
+# Cria o Treeview configurado para mostrar apenas os headings
+tree = ttk.Treeview(frame, columns=colunas, show="headings")
+for col in colunas:
+    tree.heading(col, text=col)
+    tree.column(col, width=100, anchor="center")
 
-            return df
+# Insere linhas de exemplo
+tree.insert("", "end", values=("Exemplo 1", "0.5", "1.2", "2.3", "3", "0", "4.2"))
+tree.insert("", "end", values=("Exemplo 2", "0.7", "1.4", "2.6", "5", "1", "3.8"))
+tree.insert("", "end", values=("Exemplo 3", "0.6", "1.3", "2.4", "4", "0", "4.0"))
+tree.pack(fill="both", expand=True)
 
-        # **Aplicar a função para categorizar corretamente como SUBSTITUTA**
-        df_filtrado = definir_substituta(df_filtrado)
+# Vincula o evento de duplo clique à função que abre a janela de edição
+tree.bind("<Double-1>", on_item_double_click)
 
-        # **Filtrar apenas os registros que realmente foram substituídos**
-        df_substituta = df_filtrado[df_filtrado["Categoria"] == "SUBSTITUTA"][["UT", "Nome Vulgar", "Categoria"]]
-
-        # **Verificar a saída corrigida**
-        print("\n--- df_substituta (Apenas os registros que devem ser SUBSTITUTA) ---")
-        print(df_substituta.drop_duplicates())
-
-        # **Atualizar SOMENTE os registros corretos em df_saida**
-        # Criar índice com UT, Nome Vulgar e uma chave única (Faixa, Placa) para garantir que apenas os corretos sejam substituídos
-        df_saida.set_index(["UT", "Nome Vulgar", "Faixa", "Placa"], inplace=True)
-        df_filtrado.set_index(["UT", "Nome Vulgar", "Faixa", "Placa"], inplace=True)
-
-        # **Somente substituir onde há correspondência exata**
-        df_saida.update(df_filtrado["Categoria"])
-
-        # **Resetar índice após atualização**
-        df_saida.reset_index(inplace=True)
+root.mainloop()
