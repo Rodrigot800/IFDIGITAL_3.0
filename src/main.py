@@ -17,8 +17,9 @@ CONFIG_FILE = 'config.ini'
 planilha_principal = None
 planilha_secundaria = None
 nomes_vulgares = []  # Lista de todos os nomes vulgares
-nomes_selecionados = []  # Lista para manter a ordem dos nomes selecionados
+especies_selecionados = []  # Lista para manter a ordem dos nomes selecionados
 start_total = None
+ordering_mode = "QF > Vol_m3"
 
 
 # Colunas de entrada e saída
@@ -32,7 +33,18 @@ COLUNAS_SAIDA = [
     "DAP", "Volume_m3", "Latitude", "Longitude", "DM", "Observacoes", "Categoria", "Situacao","UT_AREA_HA"
 ]
 
+
+
 # Funções da Interface e Processamento
+
+def update_ordering_mode(event=None):
+    """
+    Atualiza a variável global 'ordering_mode' com o valor selecionado no combobox 
+    e ordena o DataFrame automaticamente.
+    """
+    global ordering_mode
+    ordering_mode = combobox.get()
+    print("Modo de ordenação atualizado para:", ordering_mode)
 
 def salvar_caminho(tipo, caminho):
     """Salva o caminho da planilha no arquivo de configuração."""
@@ -124,13 +136,13 @@ def atualizar_listbox_nomes(filtro):
 def atualizar_listbox_selecionados():
     """Atualiza a Listbox com os nomes selecionados."""
     listbox_selecionados.delete(0, tk.END)
-    for nome in nomes_selecionados:
+    for nome in especies_selecionados:
         listbox_selecionados.insert(tk.END, nome)
 
 def selecionar_todos():
     """Seleciona todos os nomes vulgares e os adiciona à lista de selecionados."""
-    global nomes_selecionados
-    nomes_selecionados = nomes_vulgares[:]  # Copia todos os nomes
+    global especies_selecionados
+    especies_selecionados = nomes_vulgares[:]  # Copia todos os nomes
     atualizar_listbox_selecionados()  # Atualiza a listbox dos selecionados
 
 def pesquisar_nomes(event):
@@ -141,26 +153,26 @@ def pesquisar_nomes(event):
 
 def adicionar_selecao(event):
     """Adiciona um nome à lista de selecionados ao clicar."""
-    global nomes_selecionados
+    global especies_selecionados
 
     selecao = listbox_nomes_vulgares.curselection()
     if selecao:
         nome = listbox_nomes_vulgares.get(selecao[0])  # Obtém o nome selecionado
-        if nome not in nomes_selecionados:
-            nomes_selecionados.append(nome)
+        if nome not in especies_selecionados:
+            especies_selecionados.append(nome)
             atualizar_listbox_selecionados()
 
 
 def remover_ultimo_selecionado():
     """Remove o último nome adicionado à lista de selecionados."""
-    if nomes_selecionados:
-        nomes_selecionados.pop()
+    if especies_selecionados:
+        especies_selecionados.pop()
         atualizar_listbox_selecionados()
 
 
 def limpar_lista_selecionados():
     """Limpa todos os nomes da lista de selecionados."""
-    nomes_selecionados.clear()
+    especies_selecionados.clear()
     atualizar_listbox_selecionados()
 
 
@@ -175,7 +187,7 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
 
     inicioProcesso = time.time()
     """Processa os dados da planilha principal e mescla com nomes científicos."""
-    global planilha_principal, nomes_selecionados
+    global planilha_principal, especies_selecionados
 
     arquivo2 = entrada2_var.get()
 
@@ -236,12 +248,12 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
                             on="Nome Vulgar", how="left")
         df_saida.loc[df_saida["Nome Cientifico"].isna() | (df_saida["Nome Cientifico"]== "") , "Nome Cientifico"] = "NÃO ENCONTRADO"
         df_saida.loc[df_saida["Situacao"].isna() | (df_saida["Situacao"] == ""), "Situacao"] = "SEM RESTRIÇÃO"
-        if nomes_selecionados:
+        if especies_selecionados:
         
-            nomes_selecionados = [nome.upper() for nome in nomes_selecionados]
+            especies_selecionados = [nome.upper() for nome in especies_selecionados]
 
             df_saida["Categoria"] = df_saida["Nome Vulgar"].apply(
-            lambda nome: "REM" if nome not in nomes_selecionados else "CORTE"
+            lambda nome: "REM" if nome not in especies_selecionados else "CORTE"
             )
 
 
@@ -298,7 +310,7 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
 
         # **Filtrar apenas as espécies selecionadas que também estão classificadas como "CORTE"**
         df_filtrado = df_saida[
-            (df_saida["Nome Vulgar"].isin(nomes_selecionados)) & 
+            (df_saida["Nome Vulgar"].isin(especies_selecionados)) & 
             (df_saida["Categoria"] == "CORTE")  # Apenas árvores marcadas como CORTE
         ]
 
@@ -346,23 +358,29 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
         # Filtrar apenas as árvores que estão como CORTE e com Nome Vulgar nos selecionados
         df_filtrado = df_saida[
             (df_saida["Categoria"] == "CORTE") & 
-            (df_saida["Nome Vulgar"].isin(nomes_selecionados))
+            (df_saida["Nome Vulgar"].isin(especies_selecionados))
         ].copy()
+        
+        # ordenação e prioridade para substituta 
+        ordering_mode, df_filtrado
+        if ordering_mode == "QF > Vol_m3":
+            df_filtrado.sort_values(by=["UT", "QF", "Volume_m3"], ascending=[True, False, True], inplace=True)
+            print("-----QF > Vol_m3-----")
+        elif ordering_mode == "Vol_m3 > QF":
+            df_filtrado.sort_values(by=["UT", "Volume_m3", "QF"], ascending=[True, True, False], inplace=True)
+            print("----------")
+        elif ordering_mode == "Apenas QF":
+            df_filtrado.sort_values(by=["UT", "QF"], ascending=[True, False], inplace=True)
+            print("----------")
+        elif ordering_mode == "Apenas Vol_m3":
+            df_filtrado.sort_values(by=["UT", "Volume_m3"], ascending=[True, True], inplace=True)
+            print("----------")
+        else:
+            print("Modo de ordenação não reconhecido.")
+            return
 
-        def ordenar_df():
-            # Obtém o critério de ordenação selecionado
-            criterio = combobox.get()
-            if criterio == "UT, QF (maior para menor) e Volume_m3 (menor para maior)":
-                df_filtrado.sort_values(by=["UT", "QF", "Volume_m3"], ascending=[True, False, True], inplace=True)
-            elif criterio == "UT, Volume_m3 (menor para maior) e QF (maior para menor)":
-                df_filtrado.sort_values(by=["UT", "Volume_m3", "QF"], ascending=[True, True, False], inplace=True)
-            elif criterio == "Apenas QF (maior para menor)":
-                df_filtrado.sort_values(by=["UT", "QF"], ascending=[True, False], inplace=True)
-            elif criterio == "Apenas Volume_m3 (menor para maior)":
-                df_filtrado.sort_values(by=["UT", "Volume_m3"], ascending=[True, True], inplace=True)
-            # Exibe o DataFrame ordenado no console
-            print("DataFrame ordenado:")
-            print(df_filtrado)
+        print("DataFrame ordenado:")
+        print(df_filtrado)
 
         # Garantir que df_contagem tenha apenas uma linha por UT e Nome Vulgar
         df_contagem_agg = df_contagem.groupby(["UT", "Nome Vulgar"], as_index=False).agg({"Valor_Substituta": "sum"})
@@ -546,8 +564,23 @@ ttk.Entry(frame_inputs, textvariable=entrada2_var, width=60).grid(row=1, column=
 ttk.Button(frame_inputs, text="Selecionar", command=lambda: selecionar_arquivos("secundaria")).grid(row=1, column=2, padx=5)
 #ttk.Button(frame_inputs, text="Novo Botão", command=lambda:abrir_janela_valores_padroes(root) ).grid(row=2, column=1, pady=10, padx=5)  # Botão abaixo dos inputs
 
-botao_modificar_filtro = tk.Button(app, text="Modificar Filtragem para Substituta", command=abrir_janela_valores_padroes_callback)
-botao_modificar_filtro.pack(pady=5)
+frame_lado_a_lado = tk.Frame(app)
+frame_lado_a_lado.pack(pady=10)
+
+botao_modificar_filtro = tk.Button(frame_lado_a_lado, text="Modificar Filtragem para Substituta", 
+                                    command=abrir_janela_valores_padroes_callback)
+botao_modificar_filtro.pack(side=tk.LEFT, padx=5)
+
+combobox = ttk.Combobox(frame_lado_a_lado, state="readonly", width=30,
+                        values=[
+                            "QF > Vol_m3",
+                            "Vol_m3 > QF",
+                            "Apenas QF",
+                            "Apenas Vol_m3"
+                        ])
+combobox.current(0)  # Seleciona a primeira opção por padrão
+combobox.bind("<<ComboboxSelected>>", update_ordering_mode)
+combobox.pack(side=tk.LEFT, padx=5)
 
 # Criação dos widgets que serão atualizados
 status_label = ttk.Label(app, text="")  # Inicialmente vazio
