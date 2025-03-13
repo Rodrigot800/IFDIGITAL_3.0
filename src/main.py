@@ -6,6 +6,7 @@ import os
 import time
 from pacotes.edicaoValorFiltro import  abrir_janela_valores_padroes,valor1,valor2,valor3,valor4
 from pacotes.ordemSubstituta import OrdenadorFrame 
+from pacotes.edicaoDeValoresParaCorte import on_item_double_click
 import os
 import configparser
 import numpy as np
@@ -18,8 +19,13 @@ planilha_principal = None
 planilha_secundaria = None
 nomes_vulgares = []  # Lista de todos os nomes vulgares
 especies_selecionados = []  # Lista para manter a ordem dos nomes selecionados
+# Lista global para armazenar os dados (um dicionário para cada nome selecionado)
+selected_data_list = []
 start_total = None
 ordering_mode = "QF > Vol_m3"
+
+# Definição das colunas que serão exibidas na tabela
+columns = ("Nome", "DAP <", "DAP", "DAP >=", "QF", "ALT >", "CAP <")
 
 
 # Colunas de entrada e saída
@@ -32,8 +38,6 @@ COLUNAS_SAIDA = [
     "UT", "Faixa", "Placa", "Nome Vulgar", "Nome Cientifico", "CAP", "ALT", "QF", "X", "Y",
     "DAP", "Volume_m3", "Latitude", "Longitude", "DM", "Observacoes", "Categoria", "Situacao","UT_AREA_HA"
 ]
-
-
 
 # Funções da Interface e Processamento
 
@@ -368,13 +372,13 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
             print("-----QF > Vol_m3-----")
         elif ordering_mode == "Vol_m3 > QF":
             df_filtrado.sort_values(by=["UT", "Volume_m3", "QF"], ascending=[True, True, False], inplace=True)
-            print("----------")
+            print("------Vol_m3 > QF----")
         elif ordering_mode == "Apenas QF":
             df_filtrado.sort_values(by=["UT", "QF"], ascending=[True, False], inplace=True)
-            print("----------")
+            print("----Apenas QF------")
         elif ordering_mode == "Apenas Vol_m3":
             df_filtrado.sort_values(by=["UT", "Volume_m3"], ascending=[True, True], inplace=True)
-            print("----------")
+            print("-----Apenas Vol_m3-----")
         else:
             print("Modo de ordenação não reconhecido.")
             return
@@ -533,7 +537,7 @@ app.title("IFDIGITAL 3.0")
 app.geometry("800x900")
 
 
-largura_janela = 800
+largura_janela = 1200
 altura_janela = 900
 
 # Obter largura e altura da tela
@@ -598,8 +602,20 @@ listbox_nomes_vulgares = tk.Listbox(frame_listbox, selectmode=tk.SINGLE, width=4
 listbox_nomes_vulgares.bind("<<ListboxSelect>>", adicionar_selecao)
 listbox_nomes_vulgares.grid(row=1, column=0, padx=10, pady=10)
 
-listbox_selecionados = tk.Listbox(frame_listbox, width=40, height=20)
-listbox_selecionados.grid(row=1, column=1, padx=10, pady=10)
+# Defina as colunas que você deseja exibir
+colunas_selecionados = ("Nome", "DAP <", "DAP", "DAP >=", "QF", "ALT >", "CAP <")
+
+# Cria o Treeview configurado para exibir somente os cabeçalhos
+table_selecionados = ttk.Treeview(frame_listbox, columns=colunas_selecionados, show="headings", height=15)
+
+
+# Configura os cabeçalhos e as colunas
+for col in colunas_selecionados:
+    table_selecionados.heading(col, text=col)
+    table_selecionados.column(col, width=60, anchor="center")
+
+# Posiciona o Treeview (usando grid, por exemplo)
+table_selecionados.grid(row=1, column=1, padx=10, pady=20)
 
 ttk.Button(frame_listbox, text="Selecionar Todos", command=selecionar_todos).grid(row=3, column=0, pady=10, padx=5)
 ttk.Button(frame_listbox, text="Remover Último", command=remover_ultimo_selecionado).grid(row=2, column=0, pady=10)
