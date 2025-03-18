@@ -6,7 +6,6 @@ import os
 import time
 from pacotes.edicaoValorFiltro import  abrir_janela_valores_padroes,valor1,valor2,valor3,valor4
 from pacotes.ordemSubstituta import OrdenadorFrame 
-from pacotes.edicaoDeValoresParaCorte import on_item_double_click
 import os
 import configparser
 import numpy as np
@@ -19,13 +18,8 @@ planilha_principal = None
 planilha_secundaria = None
 nomes_vulgares = []  # Lista de todos os nomes vulgares
 especies_selecionados = []  # Lista para manter a ordem dos nomes selecionados
-# Lista global para armazenar os dados (um dicionário para cada nome selecionado)
-selected_data_list = []
 start_total = None
 ordering_mode = "QF > Vol_m3"
-
-# Definição das colunas que serão exibidas na tabela
-columns = ("Nome", "DAP <", "DAP", "DAP >=", "QF", "ALT >", "CAP <")
 
 
 # Colunas de entrada e saída
@@ -38,6 +32,8 @@ COLUNAS_SAIDA = [
     "UT", "Faixa", "Placa", "Nome Vulgar", "Nome Cientifico", "CAP", "ALT", "QF", "X", "Y",
     "DAP", "Volume_m3", "Latitude", "Longitude", "DM", "Observacoes", "Categoria", "Situacao","UT_AREA_HA"
 ]
+
+
 
 # Funções da Interface e Processamento
 
@@ -252,43 +248,66 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
                             on="Nome Vulgar", how="left")
         df_saida.loc[df_saida["Nome Cientifico"].isna() | (df_saida["Nome Cientifico"]== "") , "Nome Cientifico"] = "NÃO ENCONTRADO"
         df_saida.loc[df_saida["Situacao"].isna() | (df_saida["Situacao"] == ""), "Situacao"] = "SEM RESTRIÇÃO"
-        if especies_selecionados:
+
+        def extrair_especies_selecionadas():
+            especies_parametros = {}
+            for child in table_selecionados.get_children():
+                valores = table_selecionados.item(child, "values")
+                # Supondo que a ordem seja: ("Nome", "DAP <", "DAP >=", "QF", "ALT >", "CAP <")
+                if not valores:
+                    continue
+                nome = valores[0].upper()
+                try:
+                    # Converta os valores para os tipos desejados (ajuste conforme necessário)
+                    dap_max = float(valores[1])
+                    dap_min = float(valores[2])
+                    qf = int(valores[3])
+                    alt = float(valores[4])
+                    cap = float(valores[5])
+                except Exception:
+                    # Se ocorrer algum problema, você pode definir valores padrão ou ignorar o item
+                    continue
+                especies_parametros[nome] = {
+                    "dap_max": dap_max,
+                    "dap_min": dap_min,
+                    "qf": qf,
+                    "alt": alt,
+                    "cap": cap
+                }
+            return especies_parametros
+
+        especies_parametros = extrair_especies_selecionadas()
+        especies_selecionadas = list(especies_parametros.keys())
+
+        # Primeiro, marque como "REM" se a espécie não estiver selecionada.
+        df_saida["Categoria"] = df_saida["Nome Vulgar"].apply(
+            lambda nome: "REM" if nome.upper() not in especies_selecionadas else "CORTE"
+        )
+
+        # Em seguida, para as espécies selecionadas, aplique condições específicas.
+        def filtrar_REM(row):
+            nome = row["Nome Vulgar"].upper()
+            if nome not in especies_parametros:
+                return row["Categoria"]  # Ou "REM", se preferir
+            params = especies_parametros[nome]
+            # Exemplo de condições:
+            situacao = str(row["Situacao"]).strip().lower() if pd.notna(row["Situacao"]) else ""
+            if situacao == "protegida":
+                return "REM"
+            if row["DAP"] < params["dap_min"] or row["DAP"] >= params["dap_max"]:
+                return "REM"
+            if row["QF"] == params["qf"]:
+                return "REM"
+            if params["alt"] > 0 and row["ALT"] > params["alt"]:
+                return "REM"
+            return "CORTE"
+
+        df_saida["Categoria"] = df_saida.apply(filtrar_REM, axis=1)
+        # Imprime o DataFrame final para confirmação
+        print("df_saida final:")
+        print(df_saida)
         
-            especies_selecionados = [nome.upper() for nome in especies_selecionados]
-
-            df_saida["Categoria"] = df_saida["Nome Vulgar"].apply(
-            lambda nome: "REM" if nome not in especies_selecionados else "CORTE"
-            )
-
-
-            def filtrar_REM(row, DAPmin, DAPmax, QF, alt):
-
-                # # Atualizar a coluna "Categoria" com "REM" se a situação for "protegida"
-                situacao = str(row["Situacao"]).strip().lower() if pd.notna(row["Situacao"]) else ""
-
-                # Se for protegida, marcar como REM
-                if situacao == "protegida":
-                    return "REM"
-
-                # Se o DAP for menor que DAPmin ou maior/igual a DAPmax, marcar como REM
-                if row["DAP"] < DAPmin or row["DAP"] >= DAPmax:
-                    return "REM"
-
-                # Se QF for igual ao valor definido, marcar como REM
-                if row["QF"] == QF:
-                    return "REM"
-
-                # Se alt > 0 e ALT for maior que alt, marcar como REM
-                if alt > 0 and row["ALT"] > alt:
-                    return "REM"
-
-                # Se nenhuma condição foi atendida, mantém a categoria original
-                return row["Categoria"]
-
-            # Aplicando a função ao DataFrame
-            df_saida["Categoria"] = df_saida.apply(lambda row: filtrar_REM(row, DAPmin, DAPmax, QF, alt), axis=1) 
-        #mesclagem da ut_area_ha com ut
-
+        
         df_saida = pd.merge(
             df_saida,
             planilha_principal[["UT_ID", "UT_AREA_HA"]].drop_duplicates(),
@@ -297,6 +316,8 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
             how="left",
             suffixes=("", "_principal")
         )
+        # Imprime o DataFrame final para confirmação
+
 
 
         # Atualizar as colunas para evitar duplicações
@@ -372,13 +393,13 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
             print("-----QF > Vol_m3-----")
         elif ordering_mode == "Vol_m3 > QF":
             df_filtrado.sort_values(by=["UT", "Volume_m3", "QF"], ascending=[True, True, False], inplace=True)
-            print("------Vol_m3 > QF----")
+            print("----------")
         elif ordering_mode == "Apenas QF":
             df_filtrado.sort_values(by=["UT", "QF"], ascending=[True, False], inplace=True)
-            print("----Apenas QF------")
+            print("----------")
         elif ordering_mode == "Apenas Vol_m3":
             df_filtrado.sort_values(by=["UT", "Volume_m3"], ascending=[True, True], inplace=True)
-            print("-----Apenas Vol_m3-----")
+            print("----------")
         else:
             print("Modo de ordenação não reconhecido.")
             return
@@ -537,7 +558,7 @@ app.title("IFDIGITAL 3.0")
 app.geometry("800x900")
 
 
-largura_janela = 1200
+largura_janela = 800
 altura_janela = 900
 
 # Obter largura e altura da tela
@@ -598,32 +619,110 @@ pesquisa_entry = ttk.Entry(frame_listbox, textvariable=pesquisa_var, width=40)
 pesquisa_entry.grid(row=0, column=1, padx=10, pady=5)
 pesquisa_entry.bind("<KeyRelease>", pesquisar_nomes)
 
-listbox_nomes_vulgares = tk.Listbox(frame_listbox, selectmode=tk.SINGLE, width=40, height=20)
-listbox_nomes_vulgares.bind("<<ListboxSelect>>", adicionar_selecao)
-listbox_nomes_vulgares.grid(row=1, column=0, padx=10, pady=10)
+colunas_selecionados = ("Nome", "DAP <", "DAP >=", "QF", "ALT >", "CAP <")
 
-# Defina as colunas que você deseja exibir
-colunas_selecionados = ("Nome", "DAP <", "DAP", "DAP >=", "QF", "ALT >", "CAP <")
-
-# Cria o Treeview configurado para exibir somente os cabeçalhos
 table_selecionados = ttk.Treeview(frame_listbox, columns=colunas_selecionados, show="headings", height=15)
-
-
-# Configura os cabeçalhos e as colunas
 for col in colunas_selecionados:
     table_selecionados.heading(col, text=col)
-    table_selecionados.column(col, width=60, anchor="center")
-
-# Posiciona o Treeview (usando grid, por exemplo)
-table_selecionados.grid(row=1, column=1, padx=10, pady=20)
-
-ttk.Button(frame_listbox, text="Selecionar Todos", command=selecionar_todos).grid(row=3, column=0, pady=10, padx=5)
-ttk.Button(frame_listbox, text="Remover Último", command=remover_ultimo_selecionado).grid(row=2, column=0, pady=10)
-ttk.Button(frame_listbox, text="Limpar Lista", command=limpar_lista_selecionados).grid(row=2, column=1, pady=10)
+    table_selecionados.column(col, width=50, anchor="center")
+    table_selecionados.column("Nome", width=200, anchor="w") 
+table_selecionados.grid(row=1, column=1, padx=10, pady=10)
 
 
+# Criando a Listbox com os nomes vulgares
+listbox_nomes_vulgares = tk.Listbox(frame_listbox, selectmode=tk.SINGLE, width=25, height=20)
+listbox_nomes_vulgares.grid(row=1, column=0, padx=10, pady=10)
 
+# Função para adicionar ao clicar na Listbox
+def adicionar_selecao(event):
+    indices = listbox_nomes_vulgares.curselection()
+    if not indices:
+        return
+    
+    index = indices[0]
+    nome = listbox_nomes_vulgares.get(index)
 
+    # Verifica duplicatas antes de adicionar
+    for child in table_selecionados.get_children():
+        valores = table_selecionados.item(child, "values")
+        if valores and valores[0] == nome:
+            return  # Já está na tabela, não adiciona novamente
+
+    # Recarregar os valores do config.ini ANTES de adicionar
+    config.read("config.ini")  # Garante que estamos lendo a versão mais recente do arquivo
+
+    dap_max = config.getfloat("DEFAULT", "dapmax", fallback=0.5)
+    dap_min = config.getfloat("DEFAULT", "dapmin", fallback=5)
+    qf = config.getint("DEFAULT", "qf", fallback=3)
+    alt = config.getfloat("DEFAULT", "alt", fallback=0)
+    cap = config.getfloat("DEFAULT", "cap", fallback=2.5)
+
+    # Adiciona à tabela com os valores atualizados do config.ini
+    valores_atualizados = (nome, dap_max, dap_min, qf, alt, cap)
+    table_selecionados.insert("", "end", values=valores_atualizados)
+
+def editar_linha(event):
+    selected_item = table_selecionados.focus()
+    if not selected_item:
+        return
+
+    valores = table_selecionados.item(selected_item, "values")
+    if not valores:
+        return
+
+    def salvar_edicao():
+        novos_valores = [valores[0]] + [entry.get() for entry in entradas]
+        table_selecionados.item(selected_item, values=novos_valores)
+        popup.destroy()
+
+    popup = tk.Toplevel(app)
+    popup.title("Editar Linha")
+
+    ttk.Label(popup, text="Nome da Espécie:").grid(row=0, column=0, padx=5, pady=5)
+    ttk.Label(popup, text=valores[0], font=("Arial", 10, "bold")).grid(row=0, column=1, padx=5, pady=5)
+
+    entradas = []
+    for i, coluna in enumerate(colunas_selecionados[1:], start=1):
+        ttk.Label(popup, text=coluna).grid(row=i, column=0, padx=5, pady=5)
+        entry = ttk.Entry(popup)
+        entry.grid(row=i, column=1, padx=5, pady=5)
+        entry.insert(0, valores[i])
+        entradas.append(entry)
+
+    ttk.Button(popup, text="Salvar", command=salvar_edicao).grid(row=len(colunas_selecionados), column=0, columnspan=2, pady=10)
+
+# Função para selecionar todos os itens da Listbox
+def selecionar_todos():
+    for i in range(listbox_nomes_vulgares.size()):
+        nome = listbox_nomes_vulgares.get(i)
+        if not any(table_selecionados.item(child, "values")[0] == nome for child in table_selecionados.get_children()):
+            table_selecionados.insert("", "end", values=(nome, dap_max, dap_min, qf, alt, cap))
+
+# Função para remover o último item da tabela
+def remover_ultimo_selecionado():
+    filhos = table_selecionados.get_children()
+    if filhos:
+        table_selecionados.delete(filhos[-1])
+
+# Função para limpar todos os itens da tabela
+def limpar_lista_selecionados():
+    table_selecionados.delete(*table_selecionados.get_children())
+
+# Vinculando o clique na Listbox para adicionar à tabela
+listbox_nomes_vulgares.bind("<ButtonRelease-1>", adicionar_selecao)
+
+# Vinculando o duplo clique na tabela para edição
+table_selecionados.bind("<Double-1>", editar_linha)
+
+# Botões
+btn_todos = ttk.Button(frame_listbox, text="Selecionar Todos", command=selecionar_todos)
+btn_todos.grid(row=2, column=0, padx=5, pady=10)
+
+btn_remover = ttk.Button(frame_listbox, text="Remover Último", command=remover_ultimo_selecionado)
+btn_remover.grid(row=2, column=1, padx=5, pady=10)
+
+btn_limpar = ttk.Button(frame_listbox, text="Limpar Lista", command=limpar_lista_selecionados)
+btn_limpar.grid(row=2, column=2, padx=5, pady=10)
 
 # Frame para o botão de processamento
 frame_secundario = ttk.Frame(app, padding=(10, 10))
