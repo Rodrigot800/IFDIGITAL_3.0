@@ -17,7 +17,8 @@ CONFIG_FILE = 'config.ini'
 planilha_principal = None
 planilha_secundaria = None
 nomes_vulgares = []  # Lista de todos os nomes vulgares
-especies_selecionados = []  # Lista para manter a ordem dos nomes selecionados
+especies_selecionados = ["Abiu_Casca_Grossa"]  # Lista para manter a ordem dos nomes selecionados
+nomes_selecionados  = []
 start_total = None
 ordering_mode = "QF > Vol_m3"
 
@@ -249,65 +250,92 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
         df_saida.loc[df_saida["Nome Cientifico"].isna() | (df_saida["Nome Cientifico"]== "") , "Nome Cientifico"] = "NÃO ENCONTRADO"
         df_saida.loc[df_saida["Situacao"].isna() | (df_saida["Situacao"] == ""), "Situacao"] = "SEM RESTRIÇÃO"
 
-        def extrair_especies_selecionadas():
-            especies_parametros = {}
+
+        
+
+        def extrair_nomes_especies():
+            nomes_especies = []
             for child in table_selecionados.get_children():
                 valores = table_selecionados.item(child, "values")
-                # Supondo que a ordem seja: ("Nome", "DAP <", "DAP >=", "QF", "ALT >", "CAP <")
-                if not valores:
-                    continue
-                nome = valores[0].upper()
-                try:
-                    # Converta os valores para os tipos desejados (ajuste conforme necessário)
-                    dap_max = float(valores[1])
-                    dap_min = float(valores[2])
-                    qf = int(valores[3])
-                    alt = float(valores[4])
-                    cap = float(valores[5])
-                except Exception:
-                    # Se ocorrer algum problema, você pode definir valores padrão ou ignorar o item
-                    continue
-                especies_parametros[nome] = {
-                    "dap_max": dap_max,
-                    "dap_min": dap_min,
-                    "qf": qf,
-                    "alt": alt,
-                    "cap": cap
-                }
-            return especies_parametros
+                if valores and len(valores) > 0:
+                    nomes_especies.append(valores[0].upper())  # Apenas os nomes, convertidos para maiúsculas
+            return nomes_especies
 
-        especies_parametros = extrair_especies_selecionadas()
-        especies_selecionadas = list(especies_parametros.keys())
+        nomes_selecionados = extrair_nomes_especies()
+        print(nomes_selecionados) 
+
+       
 
         # Primeiro, marque como "REM" se a espécie não estiver selecionada.
         df_saida["Categoria"] = df_saida["Nome Vulgar"].apply(
-            lambda nome: "REM" if nome.upper() not in especies_selecionadas else "CORTE"
+            lambda nome: "REM" if nome.upper() not in nomes_selecionados else "CORTE"
         )
 
-        # Em seguida, para as espécies selecionadas, aplique condições específicas.
-        def filtrar_REM(row):
+        # Função para extrair valores da tabela
+        def extrair_parametros_tabela():
+            parametros = {}
+            for child in table_selecionados.get_children():
+                valores = table_selecionados.item(child, "values")
+                if valores and len(valores) > 0:
+                    nome = valores[0].upper()
+                    # Adiciona os parâmetros da espécie no dicionário com conversão para float
+                    try:
+                        parametros[nome] = {
+                            "dap_min": float(valores[1]) if valores[1] else 0.0,
+                            "dap_max": float(valores[2]) if valores[2] else 0.0,
+                            "qf": int(valores[3]) if valores[3] else 0,
+                            "alt": float(valores[4]) if valores[4] else 0.0,
+                            "cap": float(valores[5]) if valores[5] else 0.0
+                        }
+                    except ValueError as e:
+                        print(f"Erro ao processar valores para {nome}: {e}")
+                        continue
+            return parametros
+
+        # Função para aplicar o filtro
+        def filtrar_REM(row, parametros):
             nome = row["Nome Vulgar"].upper()
-            if nome not in especies_parametros:
-                return row["Categoria"]  # Ou "REM", se preferir
-            params = especies_parametros[nome]
-            # Exemplo de condições:
+
+            # Verificar se a espécie está na tabela de parâmetros
+            if nome not in parametros:
+                return row["Categoria"]  # Retorna a categoria atual se a espécie não estiver na tabela
+
+            # Extrair os parâmetros da tabela para a espécie
+            especie_parametros = parametros[nome]
+            DAPmin = especie_parametros["dap_min"]
+            DAPmax = especie_parametros["dap_max"]
+            QF = especie_parametros["qf"]
+            alt = especie_parametros["alt"]
+
+            # Atualizar a coluna "Categoria" com "REM" se a situação for "protegida"
             situacao = str(row["Situacao"]).strip().lower() if pd.notna(row["Situacao"]) else ""
+
+            # Se for protegida, marcar como REM
             if situacao == "protegida":
                 return "REM"
-            if row["DAP"] < params["dap_min"] or row["DAP"] >= params["dap_max"]:
-                return "REM"
-            if row["QF"] == params["qf"]:
-                return "REM"
-            if params["alt"] > 0 and row["ALT"] > params["alt"]:
-                return "REM"
-            return "CORTE"
 
-        df_saida["Categoria"] = df_saida.apply(filtrar_REM, axis=1)
-        # Imprime o DataFrame final para confirmação
-        print("df_saida final:")
-        print(df_saida)
-        
-        
+            # Se o DAP for menor que DAPmin ou maior/igual a DAPmax, marcar como REM
+            if isinstance(row["DAP"], (float, int)) and (row["DAP"] < DAPmin or row["DAP"] >= DAPmax):
+                return "REM"
+
+            # Se QF for igual ao valor definido, marcar como REM
+            if isinstance(row["QF"], int) and row["QF"] == QF:
+                return "REM"
+
+            # Se alt > 0 e ALT for maior que alt, marcar como REM
+            if isinstance(row["ALT"], (float, int)) and alt > 0 and row["ALT"] > alt:
+                return "REM"
+
+            # Se nenhuma condição foi atendida, mantém a categoria original
+            return row["Categoria"]
+
+        # Recuperar os parâmetros da tabela
+        parametros_tabela = extrair_parametros_tabela()
+
+        # Aplicando a função ao DataFrame
+        df_saida["Categoria"] = df_saida.apply(lambda row: filtrar_REM(row, parametros_tabela), axis=1)
+
+
         df_saida = pd.merge(
             df_saida,
             planilha_principal[["UT_ID", "UT_AREA_HA"]].drop_duplicates(),
@@ -335,7 +363,7 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
 
         # **Filtrar apenas as espécies selecionadas que também estão classificadas como "CORTE"**
         df_filtrado = df_saida[
-            (df_saida["Nome Vulgar"].isin(especies_selecionados)) & 
+            (df_saida["Nome Vulgar"].isin(nomes_selecionados)) &
             (df_saida["Categoria"] == "CORTE")  # Apenas árvores marcadas como CORTE
         ]
 
@@ -351,10 +379,6 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
             on=["UT", "Nome Vulgar"], 
             how="left"
         )
-
-
-        # **Exibir os primeiros resultados**
-        #print(df_contagem)
         
         # **Definir a função de substituição**
         def definir_sbustituta_vuneravel(quantidade, Situacao, area_hect):
@@ -383,7 +407,7 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
         # Filtrar apenas as árvores que estão como CORTE e com Nome Vulgar nos selecionados
         df_filtrado = df_saida[
             (df_saida["Categoria"] == "CORTE") & 
-            (df_saida["Nome Vulgar"].isin(especies_selecionados))
+            (df_saida["Nome Vulgar"].isin(nomes_selecionados))
         ].copy()
         
         # ordenação e prioridade para substituta 
@@ -404,8 +428,7 @@ def processar_planilhas(DAPmin,DAPmax,QF,alt):
             print("Modo de ordenação não reconhecido.")
             return
 
-        print("DataFrame ordenado:")
-        print(df_filtrado)
+        
 
         # Garantir que df_contagem tenha apenas uma linha por UT e Nome Vulgar
         df_contagem_agg = df_contagem.groupby(["UT", "Nome Vulgar"], as_index=False).agg({"Valor_Substituta": "sum"})
@@ -696,7 +719,7 @@ def selecionar_todos():
     for i in range(listbox_nomes_vulgares.size()):
         nome = listbox_nomes_vulgares.get(i)
         if not any(table_selecionados.item(child, "values")[0] == nome for child in table_selecionados.get_children()):
-            table_selecionados.insert("", "end", values=(nome, dap_max, dap_min, qf, alt, cap))
+            table_selecionados.insert("", "end", values=(nome, dap, dap, qf, alt, cap))
 
 # Função para remover o último item da tabela
 def remover_ultimo_selecionado():
