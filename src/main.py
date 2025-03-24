@@ -133,51 +133,89 @@ def atualizar_listbox_nomes(filtro):
         if filtro.lower() in nome.lower():
             listbox_nomes_vulgares.insert(tk.END, nome)
 
-    
-def atualizar_listbox_selecionados():
-    """Atualiza a Listbox com os nomes selecionados."""
-    listbox_selecionados.delete(0, tk.END)
-    for nome in especies_selecionados:
-        listbox_selecionados.insert(tk.END, nome)
-
-def selecionar_todos():
-    """Seleciona todos os nomes vulgares e os adiciona à lista de selecionados."""
-    global especies_selecionados
-    especies_selecionados = nomes_vulgares[:]  # Copia todos os nomes
-    atualizar_listbox_selecionados()  # Atualiza a listbox dos selecionados
-
 def pesquisar_nomes(event):
     """Callback para filtrar nomes com base na pesquisa."""
     filtro = pesquisa_var.get()
     atualizar_listbox_nomes(filtro)
 
-
+# Função para adicionar ao clicar na Listbox
 def adicionar_selecao(event):
-    """Adiciona um nome à lista de selecionados ao clicar."""
-    global especies_selecionados
+    indices = listbox_nomes_vulgares.curselection()
+    if not indices:
+        return
+    
+    index = indices[0]
+    nome = listbox_nomes_vulgares.get(index)
 
-    selecao = listbox_nomes_vulgares.curselection()
-    if selecao:
-        nome = listbox_nomes_vulgares.get(selecao[0])  # Obtém o nome selecionado
-        if nome not in especies_selecionados:
-            especies_selecionados.append(nome)
-            atualizar_listbox_selecionados()
+    # Verifica duplicatas antes de adicionar
+    for child in table_selecionados.get_children():
+        valores = table_selecionados.item(child, "values")
+        if valores and valores[0] == nome:
+            return  # Já está na tabela, não adiciona novamente
 
+    # Recarregar os valores do config.ini ANTES de adicionar
+    config.read("config.ini")  # Garante que estamos lendo a versão mais recente do arquivo
 
+    dap_max = config.getfloat("DEFAULT", "dapmax", fallback=0.5)
+    dap_min = config.getfloat("DEFAULT", "dapmin", fallback=5)
+    qf = config.getint("DEFAULT", "qf", fallback=3)
+    alt = config.getfloat("DEFAULT", "alt", fallback=0)
+    cap = config.getfloat("DEFAULT", "cap", fallback=2.5)
+
+    # Adiciona à tabela com os valores atualizados do config.ini
+    valores_atualizados = (nome, dap_max, dap_min, qf, alt, cap)
+    table_selecionados.insert("", "end", values=valores_atualizados)
+
+def editar_linha(event):
+    selected_item = table_selecionados.focus()
+    if not selected_item:
+        return
+
+    valores = table_selecionados.item(selected_item, "values")
+    if not valores:
+        return
+
+    def salvar_edicao():
+        novos_valores = [valores[0]] + [entry.get() for entry in entradas]
+        table_selecionados.item(selected_item, values=novos_valores)
+        popup.destroy()
+
+    popup = tk.Toplevel(app)
+    popup.title("Editar Linha")
+
+    ttk.Label(popup, text="Nome da Espécie:").grid(row=0, column=0, padx=5, pady=5)
+    ttk.Label(popup, text=valores[0], font=("Arial", 10, "bold")).grid(row=0, column=1, padx=5, pady=5)
+
+    entradas = []
+    for i, coluna in enumerate(colunas_selecionados[1:], start=1):
+        ttk.Label(popup, text=coluna).grid(row=i, column=0, padx=5, pady=5)
+        entry = ttk.Entry(popup)
+        entry.grid(row=i, column=1, padx=5, pady=5)
+        entry.insert(0, valores[i])
+        entradas.append(entry)
+
+    ttk.Button(popup, text="Salvar", command=salvar_edicao).grid(row=len(colunas_selecionados), column=0, columnspan=2, pady=10)
+
+# Função para selecionar todos os itens da Listbox
+def selecionar_todos():
+    for i in range(listbox_nomes_vulgares.size()):
+        nome = listbox_nomes_vulgares.get(i)
+        if not any(table_selecionados.item(child, "values")[0] == nome for child in table_selecionados.get_children()):
+            table_selecionados.insert("", "end", values=(nome, dap, dap, qf, alt, cap))
+
+# Função para remover o último item da tabela
 def remover_ultimo_selecionado():
-    """Remove o último nome adicionado à lista de selecionados."""
-    if especies_selecionados:
-        especies_selecionados.pop()
-        atualizar_listbox_selecionados()
+    filhos = table_selecionados.get_children()
+    if filhos:
+        table_selecionados.delete(filhos[-1])
 
-
+# Função para limpar todos os itens da tabela
 def limpar_lista_selecionados():
-    """Limpa todos os nomes da lista de selecionados."""
-    especies_selecionados.clear()
-    atualizar_listbox_selecionados()
+    table_selecionados.delete(*table_selecionados.get_children())
 
 
-def processar_planilhas(DAPmin,DAPmax,QF,alt):
+
+def processar_planilhas():
     
      # Oculta o botão e exibe/inicia a barra de progresso
     button_process.pack_forget()
@@ -553,13 +591,7 @@ def iniciar_processamento():
     config.read('config.ini')
     """Inicia o processamento em uma thread separada."""
     thread = threading.Thread(
-    target=processar_planilhas,
-    args=(
-        float(config.get('DEFAULT', 'dapmax')),
-        float(config.get('DEFAULT', 'dapmin')),
-        int(config.get('DEFAULT', 'qf')),
-        float(config.get('DEFAULT', 'alt'))
-        )
+    target=processar_planilhas
     )
     thread.daemon = True  # Fecha a thread quando a interface é fechada
     thread.start()
@@ -578,10 +610,10 @@ def abrir_janela_valores_padroes_callback():
 app = tk.Tk()
 
 app.title("IFDIGITAL 3.0")
-app.geometry("800x900")
+app.geometry("1200x1200")
 
 
-largura_janela = 800
+largura_janela = 1200
 altura_janela = 900
 
 # Obter largura e altura da tela
@@ -634,15 +666,28 @@ combobox.pack(side=tk.LEFT, padx=5)
 status_label = ttk.Label(app, text="")  # Inicialmente vazio
 status_label.pack(pady=10)
 
-# Frame para Listboxes
-frame_listbox = ttk.LabelFrame(app, text="Seleção de Nomes Vulgares", padding=(10, 10))
+frame_listbox_e_tabela =tk.Frame(app)
+frame_listbox_e_tabela.pack(side="left", padx=10, pady=10, fill="y")
 
-ttk.Label(frame_listbox, text="Pesquisar:").grid(row=0, column=0, sticky="w")
-pesquisa_entry = ttk.Entry(frame_listbox, textvariable=pesquisa_var, width=40)
-pesquisa_entry.grid(row=0, column=1, padx=10, pady=5)
+# Frame para Listboxes
+
+frame_listbox = ttk.LabelFrame(frame_listbox_e_tabela, text="Seleção de Nomes Vulgares", padding=(10, 10))
+frame_listbox.pack(side="left", padx=10, pady=10, fill="y")
+
+
+# Criando um Frame para alinhar a Label e a Entry horizontalmente
+frame_pesquisa = tk.Frame(frame_listbox)
+frame_pesquisa.grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky="w")
+
+# Adicionando a Label e a Entry dentro do frame_pesquisa
+ttk.Label(frame_pesquisa, text="Pesquisar:").pack(side="left")
+pesquisa_entry = ttk.Entry(frame_pesquisa, textvariable=pesquisa_var, width=40)
+pesquisa_entry.pack(side="left", padx=5)
+
+# Vinculando evento de pesquisa
 pesquisa_entry.bind("<KeyRelease>", pesquisar_nomes)
 
-colunas_selecionados = ("Nome", "DAP <", "DAP >=", "QF", "ALT >", "CAP <")
+colunas_selecionados = ("Nome", "DAP <", "DAP >=", "QF = ", "ALT >", "CAP <")
 
 table_selecionados = ttk.Treeview(frame_listbox, columns=colunas_selecionados, show="headings", height=15)
 for col in colunas_selecionados:
@@ -655,81 +700,6 @@ table_selecionados.grid(row=1, column=1, padx=10, pady=10)
 # Criando a Listbox com os nomes vulgares
 listbox_nomes_vulgares = tk.Listbox(frame_listbox, selectmode=tk.SINGLE, width=25, height=20)
 listbox_nomes_vulgares.grid(row=1, column=0, padx=10, pady=10)
-
-# Função para adicionar ao clicar na Listbox
-def adicionar_selecao(event):
-    indices = listbox_nomes_vulgares.curselection()
-    if not indices:
-        return
-    
-    index = indices[0]
-    nome = listbox_nomes_vulgares.get(index)
-
-    # Verifica duplicatas antes de adicionar
-    for child in table_selecionados.get_children():
-        valores = table_selecionados.item(child, "values")
-        if valores and valores[0] == nome:
-            return  # Já está na tabela, não adiciona novamente
-
-    # Recarregar os valores do config.ini ANTES de adicionar
-    config.read("config.ini")  # Garante que estamos lendo a versão mais recente do arquivo
-
-    dap_max = config.getfloat("DEFAULT", "dapmax", fallback=0.5)
-    dap_min = config.getfloat("DEFAULT", "dapmin", fallback=5)
-    qf = config.getint("DEFAULT", "qf", fallback=3)
-    alt = config.getfloat("DEFAULT", "alt", fallback=0)
-    cap = config.getfloat("DEFAULT", "cap", fallback=2.5)
-
-    # Adiciona à tabela com os valores atualizados do config.ini
-    valores_atualizados = (nome, dap_max, dap_min, qf, alt, cap)
-    table_selecionados.insert("", "end", values=valores_atualizados)
-
-def editar_linha(event):
-    selected_item = table_selecionados.focus()
-    if not selected_item:
-        return
-
-    valores = table_selecionados.item(selected_item, "values")
-    if not valores:
-        return
-
-    def salvar_edicao():
-        novos_valores = [valores[0]] + [entry.get() for entry in entradas]
-        table_selecionados.item(selected_item, values=novos_valores)
-        popup.destroy()
-
-    popup = tk.Toplevel(app)
-    popup.title("Editar Linha")
-
-    ttk.Label(popup, text="Nome da Espécie:").grid(row=0, column=0, padx=5, pady=5)
-    ttk.Label(popup, text=valores[0], font=("Arial", 10, "bold")).grid(row=0, column=1, padx=5, pady=5)
-
-    entradas = []
-    for i, coluna in enumerate(colunas_selecionados[1:], start=1):
-        ttk.Label(popup, text=coluna).grid(row=i, column=0, padx=5, pady=5)
-        entry = ttk.Entry(popup)
-        entry.grid(row=i, column=1, padx=5, pady=5)
-        entry.insert(0, valores[i])
-        entradas.append(entry)
-
-    ttk.Button(popup, text="Salvar", command=salvar_edicao).grid(row=len(colunas_selecionados), column=0, columnspan=2, pady=10)
-
-# Função para selecionar todos os itens da Listbox
-def selecionar_todos():
-    for i in range(listbox_nomes_vulgares.size()):
-        nome = listbox_nomes_vulgares.get(i)
-        if not any(table_selecionados.item(child, "values")[0] == nome for child in table_selecionados.get_children()):
-            table_selecionados.insert("", "end", values=(nome, dap, dap, qf, alt, cap))
-
-# Função para remover o último item da tabela
-def remover_ultimo_selecionado():
-    filhos = table_selecionados.get_children()
-    if filhos:
-        table_selecionados.delete(filhos[-1])
-
-# Função para limpar todos os itens da tabela
-def limpar_lista_selecionados():
-    table_selecionados.delete(*table_selecionados.get_children())
 
 # Vinculando o clique na Listbox para adicionar à tabela
 listbox_nomes_vulgares.bind("<ButtonRelease-1>", adicionar_selecao)
@@ -747,8 +717,26 @@ btn_remover.grid(row=2, column=1, padx=5, pady=10)
 btn_limpar = ttk.Button(frame_listbox, text="Limpar Lista", command=limpar_lista_selecionados)
 btn_limpar.grid(row=2, column=2, padx=5, pady=10)
 
+#frma para a tabela de ajuste de volume por hectar 
+
+# Segunda tabela com "UT" e "Vol/Hect Total"
+frame_tabela2 = ttk.Frame(frame_listbox_e_tabela)
+frame_tabela2.pack(side="right", padx=10, pady=10, fill="y")
+
+colunas_tabela2 = ("UT", "Vol/Hect Total")
+
+table_ut_vol = ttk.Treeview(frame_tabela2, columns=colunas_tabela2, show="headings", height=5)
+for col in colunas_tabela2:
+    table_ut_vol.heading(col, text=col)
+    table_ut_vol.column(col, width=150, anchor="center")
+table_ut_vol.pack(pady=10)
+
+# Botão abaixo da segunda tabela
+btn_confirmar = ttk.Button(frame_tabela2, text="Confirmar", command=lambda: print("Dados confirmados!"))
+btn_confirmar.pack(pady=10)
+
 # Frame para o botão de processamento
-frame_secundario = ttk.Frame(app, padding=(10, 10))
+frame_secundario = ttk.Frame(frame_listbox_e_tabela, padding=(10, 10))
 button_process = ttk.Button(frame_secundario, text="Processar Planilhas", command=iniciar_processamento, width=40)
 button_process.pack(pady=10)
 
