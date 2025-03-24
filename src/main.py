@@ -109,7 +109,7 @@ def carregar_planilha_principal(arquivo1):
         nomes_vulgares = sorted(planilha_principal["Nome Vulgar"].dropna().unique()) 
         atualizar_listbox_nomes("")  # Inicializa a Listbox com todos os nomes
 
-        frame_listbox.pack(pady=10)
+        frame_listbox_e_tabela.pack(pady=10)
         frame_secundario.pack(pady=10)
     except Exception as e:
         tk.messagebox.showerror("Erro", f"Erro ao carregar a planilha principal: {e}")
@@ -613,7 +613,7 @@ app.title("IFDIGITAL 3.0")
 app.geometry("1200x1200")
 
 
-largura_janela = 1200
+largura_janela = 1500
 altura_janela = 900
 
 # Obter largura e altura da tela
@@ -723,12 +723,12 @@ btn_limpar.grid(row=2, column=2, padx=5, pady=10)
 frame_tabela2 = ttk.Frame(frame_listbox_e_tabela)
 frame_tabela2.pack(side="right", padx=10, pady=10, fill="y")
 
-colunas_tabela2 = ("UT", "Vol/Hect Total")
+colunas_tabela2 = ("UT", "Hectares","n° arvores", "vol(m³)", "vol_Max", " m³/ha")
 
 table_ut_vol = ttk.Treeview(frame_tabela2, columns=colunas_tabela2, show="headings", height=5)
 for col in colunas_tabela2:
     table_ut_vol.heading(col, text=col)
-    table_ut_vol.column(col, width=150, anchor="center")
+    table_ut_vol.column(col, width=70, anchor="center")
 table_ut_vol.pack(pady=10)
 
 # Botão abaixo da segunda tabela
@@ -736,14 +736,15 @@ btn_confirmar = ttk.Button(frame_tabela2, text="Confirmar", command=lambda: prin
 btn_confirmar.pack(pady=10)
 
 # Frame para o botão de processamento
-frame_secundario = ttk.Frame(frame_listbox_e_tabela, padding=(10, 10))
+frame_secundario = ttk.Frame(app, padding=(10, 10))
 button_process = ttk.Button(frame_secundario, text="Processar Planilhas", command=iniciar_processamento, width=40)
 button_process.pack(pady=10)
 
 # Barra de progresso (inicialmente não exibida)
 progress_bar = ttk.Progressbar(frame_secundario, mode='indeterminate', length=300)
-frame_listbox.pack_forget()  # Inicialmente escondido
+frame_listbox_e_tabela.pack_forget()
 frame_secundario.pack_forget()  # Inicialmente escondido
+
 
 carregar_planilha_salva("principal")
 carregar_planilha_salva("secundaria")
