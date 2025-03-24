@@ -9,6 +9,8 @@ from pacotes.ordemSubstituta import OrdenadorFrame
 import os
 import configparser
 import numpy as np
+from pacotes.ajustarVolumeHect import df_saida,inicio
+
 config = configparser.ConfigParser()
 config.read('config.ini')
 CONFIG_FILE = 'config.ini'
@@ -562,7 +564,7 @@ def processar_planilhas():
         print(f"Processamento realizado em {finalProcesso - inicioProcesso:.2f} s")
 
         inicioTimeSalvar = time.time()
-
+        inicio()
         #salvar o arquivo no diretório
         diretorio = os.path.dirname(entrada1_var.get())
         arquivo_saida = os.path.join(diretorio, "Planilha Processada - IFDIGITAL 3.0.xlsx")
