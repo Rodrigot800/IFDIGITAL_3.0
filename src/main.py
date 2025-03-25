@@ -9,7 +9,6 @@ from pacotes.ordemSubstituta import OrdenadorFrame
 import os
 import configparser
 import numpy as np
-from pacotes.ajustarVolumeHect import df_saida,inicio
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -215,6 +214,40 @@ def remover_ultimo_selecionado():
 def limpar_lista_selecionados():
     table_selecionados.delete(*table_selecionados.get_children())
 
+def ajustarVolumeHect(df_saida):
+    """
+    Recebe o df_saida, ajusta-o (criando as colunas 'ut' e 'hac'),
+    e preenche a tabela table_ut_vol com os valores únicos de UT, Hectares e o número de árvores.
+    """
+
+    # Cria uma cópia do DataFrame
+    df_modificado = df_saida.copy()
+    df_modificado["ut"] = df_modificado["UT"]
+    df_modificado["hac"] = df_modificado["UT_AREA_HA"]
+
+    # Conta o número de árvores por UT
+    contagem_arvores = df_modificado.groupby("ut")["N_ARVORES"].sum().reset_index()
+    
+    # Junta os dados únicos de UT e Hectares com a contagem de árvores
+    unique_ut = df_modificado[["ut", "hac"]].drop_duplicates()
+    unique_ut = unique_ut.merge(contagem_arvores, on="ut", how="left")
+
+    # Limpa a tabela antes de inserir novos dados
+    for child in table_ut_vol.get_children():
+        table_ut_vol.delete(child)
+
+    # Insere cada par único na tabela
+    for _, row in unique_ut.iterrows():
+        ut_val = row["ut"]
+        hectares_val = row["hac"]
+        num_arvores = row["N_ARVORES"]  # Número total de árvores para essa UT
+        
+        # Insere os valores nas colunas "UT", "Hectares" e "n° Árv"
+        table_ut_vol.insert("", "end", values=(ut_val, hectares_val,num_arvores, "", "", "", "", ""))
+
+    # Debug: Verifica os dados extraídos
+    print("UT, Hectares e Número de Árvores extraídos:")
+    print(unique_ut)
 
 
 def processar_planilhas():
@@ -564,7 +597,7 @@ def processar_planilhas():
         print(f"Processamento realizado em {finalProcesso - inicioProcesso:.2f} s")
 
         inicioTimeSalvar = time.time()
-        inicio()
+        ajustarVolumeHect(df_saida)
         #salvar o arquivo no diretório
         diretorio = os.path.dirname(entrada1_var.get())
         arquivo_saida = os.path.join(diretorio, "Planilha Processada - IFDIGITAL 3.0.xlsx")
@@ -586,7 +619,6 @@ def processar_planilhas():
         progress_bar.pack_forget()
         button_process.pack(pady=10)
         tk.messagebox.showerror("Erro", f"Erro ao processar as planilhas: {e}")
-
 
 def iniciar_processamento():
     config = configparser.ConfigParser()
@@ -637,11 +669,11 @@ pesquisa_var = tk.StringVar()
 frame_inputs = ttk.LabelFrame(app, text="Entrada de Arquivos", padding=(10, 10))
 frame_inputs.pack(fill="x", pady=10, padx=10)
 
-ttk.Label(frame_inputs, text="Arquivo 1: Planilha Principal").grid(row=0, column=0, sticky="w")
+ttk.Label(frame_inputs, text="INVENTÁRIO :").grid(row=0, column=0, sticky="w")
 ttk.Entry(frame_inputs, textvariable=entrada1_var, width=60).grid(row=0, column=1, pady=5, padx=5)
 ttk.Button(frame_inputs, text="Selecionar", command=lambda: selecionar_arquivos("principal")).grid(row=0, column=2, padx=5)
 
-ttk.Label(frame_inputs, text="Arquivo 2: Planilha Secundária").grid(row=1, column=0, sticky="w")
+ttk.Label(frame_inputs, text="LISTA DE ESPECIES :").grid(row=1, column=0, sticky="w")
 ttk.Entry(frame_inputs, textvariable=entrada2_var, width=60).grid(row=1, column=1, pady=5, padx=5)
 ttk.Button(frame_inputs, text="Selecionar", command=lambda: selecionar_arquivos("secundaria")).grid(row=1, column=2, padx=5)
 #ttk.Button(frame_inputs, text="Novo Botão", command=lambda:abrir_janela_valores_padroes(root) ).grid(row=2, column=1, pady=10, padx=5)  # Botão abaixo dos inputs
@@ -725,13 +757,14 @@ btn_limpar.grid(row=2, column=2, padx=5, pady=10)
 frame_tabela2 = ttk.Frame(frame_listbox_e_tabela)
 frame_tabela2.pack(side="right", padx=10, pady=10, fill="y")
 
-colunas_tabela2 = ("UT", "Hectares","n° arvores", "vol(m³)", "vol_Max", " m³/ha")
+colunas_tabela2 = ("UT", "Hectares","n° Árv", "Vol(m³)", "Vol_Max", "Diminuir", "Aumentar"," V³/ha")
 
 table_ut_vol = ttk.Treeview(frame_tabela2, columns=colunas_tabela2, show="headings", height=5)
 for col in colunas_tabela2:
     table_ut_vol.heading(col, text=col)
     table_ut_vol.column(col, width=70, anchor="center")
 table_ut_vol.pack(pady=10)
+table_ut_vol.config(height=15)
 
 # Botão abaixo da segunda tabela
 btn_confirmar = ttk.Button(frame_tabela2, text="Confirmar", command=lambda: print("Dados confirmados!"))
