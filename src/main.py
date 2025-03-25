@@ -27,7 +27,7 @@ ordering_mode = "QF > Vol_m3"
 # Colunas de entrada e saída
 COLUNAS_ENTRADA = [
     "Folha", "Secção", "UT", "Faixa", "Placa", "Cod.", "Nome Vulgar", "CAP", "ALT", "QF",
-    "X", "Y", "DAP", "Volumes (m³)", "Latitude", "Longitude", "DM", "Observações"
+    "X", "Y", "DAP", "Volumes (m³)", "Latitude", "Longitude", "DM", "Observações","DAP_C"
 ]
 
 COLUNAS_SAIDA = [
@@ -224,13 +224,40 @@ def ajustarVolumeHect(df_saida):
     df_modificado = df_saida.copy()
     df_modificado["ut"] = df_modificado["UT"]
     df_modificado["hac"] = df_modificado["UT_AREA_HA"]
+    
+    # Cria a nova coluna DAP_C e CAP_C
+    df_modificado["DAP_C"] = df_modificado["DAP"]
+    df_modificado["CAP_C"] = df_modificado["CAP"]  # Reduz 10% do CAP_C
+    df_modificado["DAP_C"] = (df_modificado["CAP_C"] / np.pi) / 100  # Recalcula DAP_C
+    # Certifique-se de que as colunas estão em formato numérico
+    df_modificado["DAP_C"] = pd.to_numeric(df_modificado["DAP_C"], errors='coerce')
+    df_modificado["ALT"] = pd.to_numeric(df_modificado["ALT"], errors='coerce')
+
+    # Realize o cálculo e atribua o valor à coluna "Volume_m3_C"
+    df_modificado["Volume_m3_C"] = ((df_modificado["DAP_C"] ** 2) *  np.pi) / (4 * df_modificado["ALT"]  * 0.7)
+
+    # Verifique o resultado
+    print(df_modificado[["DAP_C", "ALT", "Volume_m3_C"]])
+
+    # Remove espaços extras e converte tudo para minúsculas para evitar problemas de comparação
+    df_modificado["Categoria"] = df_modificado["Categoria"].astype(str).str.strip().str.lower()
+
+    # Filtra apenas as árvores com categoria "corte" ou "substituta"
+    df_filtrado = df_modificado[df_modificado["Categoria"].isin(["corte", "substituta"])]
+
+    # Verifica se o DataFrame filtrado está vazio
+    if df_filtrado.empty:
+        print("Nenhuma árvore foi categorizada como 'corte' ou 'substituta'.")
 
     # Conta o número de árvores por UT
-    contagem_arvores = df_modificado.groupby("ut")["N_ARVORES"].sum().reset_index()
-    
+    contagem_arvores = df_filtrado.groupby("ut").size().reset_index(name="num_arvores")
+
     # Junta os dados únicos de UT e Hectares com a contagem de árvores
     unique_ut = df_modificado[["ut", "hac"]].drop_duplicates()
-    unique_ut = unique_ut.merge(contagem_arvores, on="ut", how="left")
+    unique_ut = unique_ut.merge(contagem_arvores, on="ut", how="left").fillna(0)
+
+    # Converte valores para inteiros
+    unique_ut["num_arvores"] = unique_ut["num_arvores"].astype(int)
 
     # Limpa a tabela antes de inserir novos dados
     for child in table_ut_vol.get_children():
@@ -238,17 +265,24 @@ def ajustarVolumeHect(df_saida):
 
     # Insere cada par único na tabela
     for _, row in unique_ut.iterrows():
-        ut_val = row["ut"]
-        hectares_val = row["hac"]
-        num_arvores = row["N_ARVORES"]  # Número total de árvores para essa UT
-        
-        # Insere os valores nas colunas "UT", "Hectares" e "n° Árv"
-        table_ut_vol.insert("", "end", values=(ut_val, hectares_val,num_arvores, "", "", "", "", ""))
+        ut_val = f"{row['ut']:.0f}"
+        hectares_val = f"{row['hac']:.5f}"
+        num_arvores = row["num_arvores"]  # Número de árvores filtradas para essa UT
+
+        # Insere os valores na tabela
+        table_ut_vol.insert("", "end", values=(ut_val, hectares_val, num_arvores, "", "", "", "", ""))
+    print(df_modificado.columns)
 
     # Debug: Verifica os dados extraídos
-    print("UT, Hectares e Número de Árvores extraídos:")
+    print("UT, Hectares e Número de Árvores filtradas por 'corte' e 'substituta':")
     print(unique_ut)
 
+    # Exporta para Excel
+    df_modificado = df_modificado[[ "UT", "Faixa", "Placa", "Nome Vulgar", "CAP","CAP_C", "ALT", "QF",
+    "X", "Y", "DAP","DAP_C", "Volume_m3","Volume_m3_C","DM", "Categoria"]]
+    diretorio = os.path.dirname(entrada1_var.get())
+    arquivo_saida = os.path.join(diretorio, "Planilha ajustada - IFDIGITAL 3.0.xlsx")
+    df_modificado.to_excel(arquivo_saida, index=False, engine="xlsxwriter")
 
 def processar_planilhas():
     
@@ -588,8 +622,7 @@ def processar_planilhas():
         print(f"REM: {contagem_categorias.get('REM', 0)}")
 
         print(f"Numero total de linhas em df_saida: {len(df_saida)}")
-        #organizando as colunas
-        df_saida = df_saida[COLUNAS_SAIDA]
+        
         
         
 
@@ -598,10 +631,12 @@ def processar_planilhas():
 
         inicioTimeSalvar = time.time()
         ajustarVolumeHect(df_saida)
+        #organizando as colunas
+        df_saida = df_saida[COLUNAS_SAIDA]
         #salvar o arquivo no diretório
-        diretorio = os.path.dirname(entrada1_var.get())
-        arquivo_saida = os.path.join(diretorio, "Planilha Processada - IFDIGITAL 3.0.xlsx")
-        df_saida.to_excel(arquivo_saida,index=False,engine="xlsxwriter")
+        # diretorio = os.path.dirname(entrada1_var.get())
+        # arquivo_saida = os.path.join(diretorio, "Planilha Processada - IFDIGITAL 3.0.xlsx")
+        # df_saida.to_excel(arquivo_saida,index=False,engine="xlsxwriter")
         finalTimeSalvar = time.time()
 
         # finalizando barra de progresso
@@ -764,7 +799,7 @@ for col in colunas_tabela2:
     table_ut_vol.heading(col, text=col)
     table_ut_vol.column(col, width=70, anchor="center")
 table_ut_vol.pack(pady=10)
-table_ut_vol.config(height=15)
+table_ut_vol.config(height=20)
 
 # Botão abaixo da segunda tabela
 btn_confirmar = ttk.Button(frame_tabela2, text="Confirmar", command=lambda: print("Dados confirmados!"))
