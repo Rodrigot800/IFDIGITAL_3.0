@@ -217,69 +217,99 @@ def limpar_lista_selecionados():
 def ajustarVolumeHect(df_saida):
     """
     Recebe o df_saida, ajusta-o (criando as colunas 'ut' e 'hac'),
-    e preenche a tabela table_ut_vol com os valores únicos de UT, Hectares e o número de árvores.
+    e preenche a tabela table_ut_vol com os valores únicos de UT, Hectares, número de árvores, volume total, volume máximo,
+    diminuir e aumentar a diferença entre volume total e volume máximo.
     """
-
-    # Cria uma cópia do DataFrame
+    # Criando cópia do DataFrame para não modificar o original
     df_modificado = df_saida.copy()
     df_modificado["ut"] = df_modificado["UT"]
     df_modificado["hac"] = df_modificado["UT_AREA_HA"]
     
-    # Cria a nova coluna DAP_C e CAP_C
+    # Criando as colunas DAP_C e CAP_C
     df_modificado["DAP_C"] = df_modificado["DAP"]
-    df_modificado["CAP_C"] = df_modificado["CAP"]  # Reduz 10% do CAP_C
-    df_modificado["DAP_C"] = (df_modificado["CAP_C"] / np.pi) / 100  # Recalcula DAP_C
-    # Certifique-se de que as colunas estão em formato numérico
+    df_modificado["CAP_C"] = df_modificado["CAP"]  
+    df_modificado["DAP_C"] = (df_modificado["CAP_C"] / np.pi) / 100  
+
+    # Garantindo que os valores sejam numéricos
     df_modificado["DAP_C"] = pd.to_numeric(df_modificado["DAP_C"], errors='coerce')
     df_modificado["ALT"] = pd.to_numeric(df_modificado["ALT"], errors='coerce')
 
-    # Realize o cálculo e atribua o valor à coluna "Volume_m3_C"
-    df_modificado["Volume_m3_C"] = ((df_modificado["DAP_C"] ** 2) *  np.pi) / (4 * df_modificado["ALT"]  * 0.7)
+    # Cálculo do Volume_m3_C
+    df_modificado["Volume_m3_C"] = ((df_modificado["DAP_C"] ** 2) * np.pi / 4) * df_modificado["ALT"] * 0.7
 
-    # Verifique o resultado
-    print(df_modificado[["DAP_C", "ALT", "Volume_m3_C"]])
-
-    # Remove espaços extras e converte tudo para minúsculas para evitar problemas de comparação
+    # Normalizando a coluna "Categoria"
     df_modificado["Categoria"] = df_modificado["Categoria"].astype(str).str.strip().str.lower()
 
-    # Filtra apenas as árvores com categoria "corte" ou "substituta"
-    df_filtrado = df_modificado[df_modificado["Categoria"].isin(["corte", "substituta"])]
-
-    # Verifica se o DataFrame filtrado está vazio
+    # Filtrando árvores das categorias "corte"
+    df_filtrado = df_modificado[df_modificado["Categoria"].isin(["corte"])]
+    
+    # Se não houver árvores filtradas, define um DataFrame vazio
     if df_filtrado.empty:
-        print("Nenhuma árvore foi categorizada como 'corte' ou 'substituta'.")
+        print("Nenhuma árvore foi categorizada como 'corte'.")
+        unique_ut = df_modificado[["ut", "hac"]].drop_duplicates()
+        unique_ut["num_arvores"] = 0
+        unique_ut["volume_total"] = 0
+        unique_ut["diminuir"] = 0
+        unique_ut["aumentar"] = 0
+    else:
+        # Contando número de árvores por UT
+        contagem_arvores = df_filtrado.groupby("ut").size().reset_index(name="num_arvores")
 
-    # Conta o número de árvores por UT
-    contagem_arvores = df_filtrado.groupby("ut").size().reset_index(name="num_arvores")
+        # Calculando volume total por UT
+        volume_total_por_ut = df_filtrado.groupby("ut")["Volume_m3_C"].sum().reset_index()
+        volume_total_por_ut.rename(columns={"Volume_m3_C": "volume_total"}, inplace=True)
+        
+        # Criando unique_ut
+        unique_ut = df_modificado[["ut", "hac"]].drop_duplicates()
 
-    # Junta os dados únicos de UT e Hectares com a contagem de árvores
-    unique_ut = df_modificado[["ut", "hac"]].drop_duplicates()
-    unique_ut = unique_ut.merge(contagem_arvores, on="ut", how="left").fillna(0)
+        # Calcula o volume máximo como hectáres * 30
+        unique_ut["volume_max"] = unique_ut["hac"] * 30
 
-    # Converte valores para inteiros
+        # Atualizando os valores de árvores e volume total
+        unique_ut = unique_ut.merge(contagem_arvores, on="ut", how="left").fillna(0)
+        unique_ut = unique_ut.merge(volume_total_por_ut, on="ut", how="left").fillna(0)
+
+        # Calcula o volume por hectare (evita divisão por zero)
+        unique_ut["volume_por_hectare"] = unique_ut.apply(
+            lambda row: row["volume_total"] / row["hac"] if row["hac"] > 0 else 0, axis=1
+        )
+        
+        # Calculando as diferenças para "diminuir" ou "aumentar"
+        unique_ut["diminuir"] = unique_ut.apply(
+            lambda row: row["volume_total"] - row["volume_max"] if row["volume_total"] > row["volume_max"] else 0, axis=1
+        )
+        unique_ut["aumentar"] = unique_ut.apply(
+            lambda row: row["volume_max"] - row["volume_total"] if row["volume_total"] < row["volume_max"] else 0, axis=1
+        )
+
+    # Convertendo número de árvores para inteiro
     unique_ut["num_arvores"] = unique_ut["num_arvores"].astype(int)
 
-    # Limpa a tabela antes de inserir novos dados
+    # **Limpando a tabela antes de adicionar novos valores**
     for child in table_ut_vol.get_children():
         table_ut_vol.delete(child)
 
-    # Insere cada par único na tabela
+    # Inserindo os novos valores na tabela
     for _, row in unique_ut.iterrows():
         ut_val = f"{row['ut']:.0f}"
         hectares_val = f"{row['hac']:.5f}"
-        num_arvores = row["num_arvores"]  # Número de árvores filtradas para essa UT
+        num_arvores = f"{row['num_arvores']:.0f}"
+        volume_total = f"{row['volume_total']:.5f}"
+        volume_max = f"{row['volume_max']:.5f}"
+        volume_por_hect = f"{row['volume_por_hectare']:.2f}"
+        diminuir_val = f"{row['diminuir']:.3f}"
+        aumentar_val = f"{row['aumentar']:.3f}"
+        
+        # Inserindo os valores na tabela
+        table_ut_vol.insert("", "end", values=(ut_val, hectares_val, num_arvores, volume_total, volume_max, diminuir_val, aumentar_val, volume_por_hect))
 
-        # Insere os valores na tabela
-        table_ut_vol.insert("", "end", values=(ut_val, hectares_val, num_arvores, "", "", "", "", ""))
-    print(df_modificado.columns)
-
-    # Debug: Verifica os dados extraídos
-    print("UT, Hectares e Número de Árvores filtradas por 'corte' e 'substituta':")
+    # Debug: Mostrando os dados atualizados
+    print("UT, Hectares, Número de Árvores e Volume Total Atualizados:")
     print(unique_ut)
 
-    # Exporta para Excel
-    df_modificado = df_modificado[[ "UT", "Faixa", "Placa", "Nome Vulgar", "CAP","CAP_C", "ALT", "QF",
-    "X", "Y", "DAP","DAP_C", "Volume_m3","Volume_m3_C","DM", "Categoria"]]
+    # Exportando para Excel
+    df_modificado = df_modificado[["UT", "Faixa", "Placa", "Nome Vulgar", "CAP", "CAP_C", "ALT", "QF",
+                                    "X", "Y", "DAP", "DAP_C", "Volume_m3", "Volume_m3_C", "DM", "Categoria"]]
     diretorio = os.path.dirname(entrada1_var.get())
     arquivo_saida = os.path.join(diretorio, "Planilha ajustada - IFDIGITAL 3.0.xlsx")
     df_modificado.to_excel(arquivo_saida, index=False, engine="xlsxwriter")
@@ -792,7 +822,7 @@ btn_limpar.grid(row=2, column=2, padx=5, pady=10)
 frame_tabela2 = ttk.Frame(frame_listbox_e_tabela)
 frame_tabela2.pack(side="right", padx=10, pady=10, fill="y")
 
-colunas_tabela2 = ("UT", "Hectares","n° Árv", "Vol(m³)", "Vol_Max", "Diminuir", "Aumentar"," V³/ha")
+colunas_tabela2 = ("UT", "Hectares","n° Árv", "Vol(m³)", "Vol_Max", "Diminuir", "Aumentar"," V_m³/ha")
 
 table_ut_vol = ttk.Treeview(frame_tabela2, columns=colunas_tabela2, show="headings", height=5)
 for col in colunas_tabela2:
