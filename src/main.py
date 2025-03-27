@@ -18,11 +18,11 @@ CONFIG_FILE = 'config.ini'
 planilha_principal = None
 planilha_secundaria = None
 nomes_vulgares = []  # Lista de todos os nomes vulgares
-especies_selecionados = ["Abiu_Casca_Grossa"]  # Lista para manter a ordem dos nomes selecionados
+especies_selecionados = []  # Lista para manter a ordem dos nomes selecionados
 nomes_selecionados  = []
 start_total = None
 ordering_mode = "QF > Vol_m3"
-
+df_tabelaDeAjusteVol = 0
 
 # Colunas de entrada e saída
 COLUNAS_ENTRADA = [
@@ -246,11 +246,11 @@ def ajustarVolumeHect(df_saida):
     # Se não houver árvores filtradas, define um DataFrame vazio
     if df_filtrado.empty:
         print("Nenhuma árvore foi categorizada como 'corte'.")
-        unique_ut = df_modificado[["ut", "hac"]].drop_duplicates()
-        unique_ut["num_arvores"] = 0
-        unique_ut["volume_total"] = 0
-        unique_ut["diminuir"] = 0
-        unique_ut["aumentar"] = 0
+        df_tabelaDeAjusteVol = df_modificado[["ut", "hac"]].drop_duplicates()
+        df_tabelaDeAjusteVol["num_arvores"] = 0
+        df_tabelaDeAjusteVol["volume_total"] = 0
+        df_tabelaDeAjusteVol["diminuir"] = 0
+        df_tabelaDeAjusteVol["aumentar"] = 0
     else:
         # Contando número de árvores por UT
         contagem_arvores = df_filtrado.groupby("ut").size().reset_index(name="num_arvores")
@@ -259,38 +259,45 @@ def ajustarVolumeHect(df_saida):
         volume_total_por_ut = df_filtrado.groupby("ut")["Volume_m3_C"].sum().reset_index()
         volume_total_por_ut.rename(columns={"Volume_m3_C": "volume_total"}, inplace=True)
         
-        # Criando unique_ut
-        unique_ut = df_modificado[["ut", "hac"]].drop_duplicates()
+        # Criando df_tabelaDeAjusteVol
+        df_tabelaDeAjusteVol = df_modificado[["ut", "hac"]].drop_duplicates()
+        print(df_tabelaDeAjusteVol)
 
         # Calcula o volume máximo como hectáres * 30
-        unique_ut["volume_max"] = unique_ut["hac"] * 30
+        df_tabelaDeAjusteVol["volume_max"] = df_tabelaDeAjusteVol["hac"] * 30
 
         # Atualizando os valores de árvores e volume total
-        unique_ut = unique_ut.merge(contagem_arvores, on="ut", how="left").fillna(0)
-        unique_ut = unique_ut.merge(volume_total_por_ut, on="ut", how="left").fillna(0)
+        df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.merge(contagem_arvores, on="ut", how="left").fillna(0)
+        df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.merge(volume_total_por_ut, on="ut", how="left").fillna(0)
 
         # Calcula o volume por hectare (evita divisão por zero)
-        unique_ut["volume_por_hectare"] = unique_ut.apply(
+        df_tabelaDeAjusteVol["volume_por_hectare"] = df_tabelaDeAjusteVol.apply(
             lambda row: row["volume_total"] / row["hac"] if row["hac"] > 0 else 0, axis=1
         )
         
         # Calculando as diferenças para "diminuir" ou "aumentar"
-        unique_ut["diminuir"] = unique_ut.apply(
+        df_tabelaDeAjusteVol["diminuir"] = df_tabelaDeAjusteVol.apply(
             lambda row: row["volume_total"] - row["volume_max"] if row["volume_total"] > row["volume_max"] else 0, axis=1
         )
-        unique_ut["aumentar"] = unique_ut.apply(
+        df_tabelaDeAjusteVol["aumentar"] = df_tabelaDeAjusteVol.apply(
             lambda row: row["volume_max"] - row["volume_total"] if row["volume_total"] < row["volume_max"] else 0, axis=1
         )
 
     # Convertendo número de árvores para inteiro
-    unique_ut["num_arvores"] = unique_ut["num_arvores"].astype(int)
+    df_tabelaDeAjusteVol["num_arvores"] = df_tabelaDeAjusteVol["num_arvores"].astype(int)
 
-    # **Limpando a tabela antes de adicionar novos valores**
-    for child in table_ut_vol.get_children():
-        table_ut_vol.delete(child)
+    # Criando as colunas DAP, CAP e ALT se não existirem e preenchendo com 0 se necessário
+    for col in ["DAP", "CAP", "ALT"]:
+        if col not in df_tabelaDeAjusteVol.columns:
+            df_tabelaDeAjusteVol[col] = 0  # Criando as colunas com valor 0
+
+    # Garantindo que valores nulos ou negativos sejam preenchidos com 0
+    df_tabelaDeAjusteVol["DAP"] = df_tabelaDeAjusteVol["DAP"].apply(lambda x: x if x > 0 else 0)
+    df_tabelaDeAjusteVol["CAP"] = df_tabelaDeAjusteVol["CAP"].apply(lambda x: x if x > 0 else 0)
+    df_tabelaDeAjusteVol["ALT"] = df_tabelaDeAjusteVol["ALT"].apply(lambda x: x if x > 0 else 0)
 
     # Inserindo os novos valores na tabela
-    for _, row in unique_ut.iterrows():
+    for _, row in df_tabelaDeAjusteVol.iterrows():
         ut_val = f"{row['ut']:.0f}"
         hectares_val = f"{row['hac']:.5f}"
         num_arvores = f"{row['num_arvores']:.0f}"
@@ -299,13 +306,18 @@ def ajustarVolumeHect(df_saida):
         volume_por_hect = f"{row['volume_por_hectare']:.2f}"
         diminuir_val = f"{row['diminuir']:.3f}"
         aumentar_val = f"{row['aumentar']:.3f}"
-        
-        # Inserindo os valores na tabela
-        table_ut_vol.insert("", "end", values=(ut_val, hectares_val, num_arvores, volume_total, volume_max, diminuir_val, aumentar_val, volume_por_hect))
+        DAP_val = f"{row['DAP']:.2f}"
+        CAP_val = f"{row['CAP']:.1f}"
+        ALT_val = f"{row['ALT']:.1f}"
 
+        # Inserindo os valores na tabela
+        table_ut_vol.insert("", "end", values=(ut_val, hectares_val, num_arvores,
+                                                volume_total, volume_max, diminuir_val,
+                                                aumentar_val, volume_por_hect,
+                                                DAP_val, CAP_val, ALT_val))
     # Debug: Mostrando os dados atualizados
     print("UT, Hectares, Número de Árvores e Volume Total Atualizados:")
-    print(unique_ut)
+    print(df_tabelaDeAjusteVol)
 
     # Exportando para Excel
     df_modificado = df_modificado[["UT", "Faixa", "Placa", "Nome Vulgar", "CAP", "CAP_C", "ALT", "QF",
@@ -702,8 +714,51 @@ def abrir_janela_valores_padroes_callback():
     
     # Aguarda até que a janela secundária seja fechada
     app.wait_window(janela_padrao)
-    
-    
+
+# Índices das colunas que podem ser editadas
+colunas_editaveis = [ "CAP", "ALT"]
+
+# Função para editar somente as colunas permitidas
+def editar_celula_volume(event):
+    """Permite editar apenas as colunas DAP, CAP e ALT ao dar duplo clique."""
+    # Obtém o item e a coluna clicada
+    item_selecionado = table_ut_vol.identify_row(event.y)
+    coluna_selecionada = table_ut_vol.identify_column(event.x)
+
+    if not item_selecionado:
+        return
+
+    # Obtém índice da coluna
+    col_index = int(coluna_selecionada[1:]) - 1  # Converte "#x" para índice (ex: "#9" → 8)
+    col_nome = colunas_tabela2[col_index]  # Nome da coluna clicada
+
+    # Verifica se a coluna é editável
+    if col_nome not in colunas_editaveis:
+        return
+
+    # Obtém as coordenadas da célula
+    x, y, largura, altura = table_ut_vol.bbox(item_selecionado, col_index)
+
+    # Obtém o valor atual
+    valor_atual = table_ut_vol.item(item_selecionado, "values")[col_index]
+
+    # Criar Entry para edição
+    entry = tk.Entry(table_ut_vol)
+    entry.place(x=x, y=y, width=largura, height=altura)
+    entry.insert(0, valor_atual)
+    entry.focus()
+
+    # Função para salvar e remover o Entry
+    def salvar_novo_valor(event=None):
+        novo_valor = entry.get()
+        valores_atualizados = list(table_ut_vol.item(item_selecionado, "values"))
+        valores_atualizados[col_index] = novo_valor
+        table_ut_vol.item(item_selecionado, values=valores_atualizados)
+        entry.destroy()
+
+    # Bind para salvar ao pressionar Enter ou sair do campo
+    entry.bind("<Return>", salvar_novo_valor)
+    entry.bind("<FocusOut>", salvar_novo_valor) 
 
 # Interface gráfica
 app = tk.Tk()
@@ -822,17 +877,23 @@ btn_limpar.grid(row=2, column=2, padx=5, pady=10)
 frame_tabela2 = ttk.Frame(frame_listbox_e_tabela)
 frame_tabela2.pack(side="right", padx=10, pady=10, fill="y")
 
-colunas_tabela2 = ("UT", "Hectares","n° Árv", "Vol(m³)", "Vol_Max", "Diminuir", "Aumentar"," V_m³/ha")
-
+# Definição das colunas
+colunas_tabela2 = ("UT", "Hectares", "n° Árv", "Vol(m³)", "Vol_Max", "Diminuir", "Aumentar", "V_m³/ha", "DAP", "CAP", "ALT")
 table_ut_vol = ttk.Treeview(frame_tabela2, columns=colunas_tabela2, show="headings", height=5)
+
+# Configuração das colunas
 for col in colunas_tabela2:
     table_ut_vol.heading(col, text=col)
     table_ut_vol.column(col, width=70, anchor="center")
+
 table_ut_vol.pack(pady=10)
-table_ut_vol.config(height=20)
+table_ut_vol.config(height=10)
+
+# Adiciona evento de duplo clique para editar
+table_ut_vol.bind("<Double-1>", editar_celula_volume)
 
 # Botão abaixo da segunda tabela
-btn_confirmar = ttk.Button(frame_tabela2, text="Confirmar", command=lambda: print("Dados confirmados!"))
+btn_confirmar = ttk.Button(frame_tabela2, text="editar cap alt", command=lambda: print("Dados confirmados!"))
 btn_confirmar.pack(pady=10)
 
 # Frame para o botão de processamento
