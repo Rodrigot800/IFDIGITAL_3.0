@@ -22,7 +22,8 @@ especies_selecionados = []  # Lista para manter a ordem dos nomes selecionados
 nomes_selecionados  = []
 start_total = None
 ordering_mode = "QF > Vol_m3"
-df_tabelaDeAjusteVol = 0
+
+df_tabelaDeAjusteVol = None
 
 # Colunas de entrada e saída
 COLUNAS_ENTRADA = [
@@ -215,6 +216,7 @@ def limpar_lista_selecionados():
     table_selecionados.delete(*table_selecionados.get_children())
 
 def ajustarVolumeHect(df_saida):
+    global df_tabelaDeAjusteVol
     """
     Recebe o df_saida, ajusta-o (criando as colunas 'ut' e 'hac'),
     e preenche a tabela table_ut_vol com os valores únicos de UT, Hectares, número de árvores, volume total, volume máximo,
@@ -718,19 +720,19 @@ def abrir_janela_valores_padroes_callback():
 # Índices das colunas que podem ser editadas
 colunas_editaveis = [ "CAP", "ALT"]
 
-# Função para editar somente as colunas permitidas
 def editar_celula_volume(event):
-    """Permite editar apenas as colunas DAP, CAP e ALT ao dar duplo clique."""
+    """Permite editar apenas as colunas CAP e ALT ao dar duplo clique."""
+    global df_tabelaDeAjusteVol
     # Obtém o item e a coluna clicada
-    item_selecionado = table_ut_vol.identify_row(event.y)
+    item_selecionado = table_ut_vol.focus()  # Captura a linha selecionada
     coluna_selecionada = table_ut_vol.identify_column(event.x)
 
     if not item_selecionado:
         return
 
-    # Obtém índice da coluna
-    col_index = int(coluna_selecionada[1:]) - 1  # Converte "#x" para índice (ex: "#9" → 8)
-    col_nome = colunas_tabela2[col_index]  # Nome da coluna clicada
+    # Obtém índice da coluna (converte "#x" para índice, ex: "#2" → 1)
+    col_index = int(coluna_selecionada[1:]) - 1
+    col_nome = table_ut_vol["columns"][col_index]  # Nome da coluna
 
     # Verifica se a coluna é editável
     if col_nome not in colunas_editaveis:
@@ -740,7 +742,8 @@ def editar_celula_volume(event):
     x, y, largura, altura = table_ut_vol.bbox(item_selecionado, col_index)
 
     # Obtém o valor atual
-    valor_atual = table_ut_vol.item(item_selecionado, "values")[col_index]
+    valores = table_ut_vol.item(item_selecionado, "values")
+    valor_atual = valores[col_index]
 
     # Criar Entry para edição
     entry = tk.Entry(table_ut_vol)
@@ -748,17 +751,56 @@ def editar_celula_volume(event):
     entry.insert(0, valor_atual)
     entry.focus()
 
-    # Função para salvar e remover o Entry
     def salvar_novo_valor(event=None):
+        global df_tabelaDeAjusteVol  # Garante acesso ao DataFrame global
         novo_valor = entry.get()
+
+        try:
+            novo_valor = float(novo_valor)  # Converte para número
+        except ValueError:
+            entry.destroy()
+            return  # Sai sem salvar se o valor não for numérico
+
+        # Atualiza a exibição na Treeview
         valores_atualizados = list(table_ut_vol.item(item_selecionado, "values"))
         valores_atualizados[col_index] = novo_valor
         table_ut_vol.item(item_selecionado, values=valores_atualizados)
-        entry.destroy()
+
+        # Obtém o valor da coluna "ut" para encontrar a linha correspondente no DataFrame
+        ut_val = float(valores_atualizados[0])  # O primeiro valor da linha é o "ut"
+
+        # Verifica se a coluna "ut" existe antes de acessar
+        if "ut" not in df_tabelaDeAjusteVol.columns:
+            print("Erro: A coluna 'ut' não existe no DataFrame!")
+            entry.destroy()
+            return
+
+        # Encontra o índice correto no DataFrame
+        index_df = df_tabelaDeAjusteVol[df_tabelaDeAjusteVol["ut"] == ut_val].index
+
+        if index_df.empty:
+            print(f"Erro: UT {ut_val} não encontrado no DataFrame!")
+            entry.destroy()
+            return
+
+        # A variável `index_df` pode ser uma série de índices, então vamos garantir que pegamos o primeiro
+        index_df = index_df[0]  # Acessando o primeiro índice se houver múltiplos
+
+        # Atualiza o valor no DataFrame
+        df_tabelaDeAjusteVol.at[index_df, col_nome] = novo_valor  # Usando .at para indexação precisa
+        print(f"Valor atualizado: UT={ut_val}, {col_nome}={novo_valor}")  # Debug
+
+        # Atualiza também na tabela visual
+        table_ut_vol.item(item_selecionado, values=valores_atualizados)
+
+        entry.destroy()  # Fecha o campo Entry
+        print(df_tabelaDeAjusteVol)
+
 
     # Bind para salvar ao pressionar Enter ou sair do campo
     entry.bind("<Return>", salvar_novo_valor)
-    entry.bind("<FocusOut>", salvar_novo_valor) 
+    entry.bind("<FocusOut>", salvar_novo_valor)
+
 
 # Interface gráfica
 app = tk.Tk()
