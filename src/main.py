@@ -24,6 +24,7 @@ start_total = None
 ordering_mode = "QF > Vol_m3"
 
 df_tabelaDeAjusteVol = None
+global df_valores_atualizados
 
 # Colunas de entrada e saída
 COLUNAS_ENTRADA = [
@@ -216,36 +217,51 @@ def limpar_lista_selecionados():
     table_selecionados.delete(*table_selecionados.get_children())
 
 def ajustarVolumeHect(df_saida):
-    global df_tabelaDeAjusteVol
-    """
-    Recebe o df_saida, ajusta-o (criando as colunas 'ut' e 'hac'),
-    e preenche a tabela table_ut_vol com os valores únicos de UT, Hectares, número de árvores, volume total, volume máximo,
-    diminuir e aumentar a diferença entre volume total e volume máximo.
-    """
-    # Criando cópia do DataFrame para não modificar o original
+    global df_tabelaDeAjusteVol, df_valores_atualizados
+
+    # Cria uma cópia do DataFrame original para não modificá-lo
     df_modificado = df_saida.copy()
+
+    # Se houver um DataFrame global com valores atualizados, incorpora CAP e ALT
+    if 'df_valores_atualizados' in globals() and not df_valores_atualizados.empty:
+        # Realiza o merge com base em UT; pressupõe que df_valores_atualizados tenha colunas "ut", "CAP" e "ALT"
+        df_modificado = df_modificado.merge(
+            df_valores_atualizados, left_on="UT", right_on="ut", how="left", suffixes=("", "_atualizado")
+        )
+        # Para cada coluna de interesse, usa o valor atualizado se existir, senão mantém o original
+        for col in ["CAP", "ALT"]:
+            if f"{col}_atualizado" in df_modificado.columns:
+                df_modificado[col] = df_modificado[f"{col}_atualizado"].combine_first(df_modificado[col])
+        # Remove as colunas auxiliares que vieram do merge, mas somente as que existem
+        cols_aux = [f"{col}_atualizado" for col in ["CAP", "ALT", "ut"]]
+        cols_to_drop = [c for c in cols_aux if c in df_modificado.columns]
+        if cols_to_drop:
+            df_modificado.drop(columns=cols_to_drop, inplace=True)
+
+    # Cria as colunas "ut" e "hac" copiando dos campos originais
+    # Esses campos serão usados para agrupar os dados
     df_modificado["ut"] = df_modificado["UT"]
     df_modificado["hac"] = df_modificado["UT_AREA_HA"]
-    
-    # Criando as colunas DAP_C e CAP_C
-    df_modificado["DAP_C"] = df_modificado["DAP"]
-    df_modificado["CAP_C"] = df_modificado["CAP"]  
-    df_modificado["DAP_C"] = (df_modificado["CAP_C"] / np.pi) / 100  
 
-    # Garantindo que os valores sejam numéricos
+    # Cria as colunas de cálculo: ALT_C e CAP_C (se necessário)
+    df_modificado["ALT_C"] = df_modificado["ALT"]
+    df_modificado["CAP_C"] = df_modificado["CAP"]
+    # Calcula DAP_C a partir de CAP_C (se for essa a intenção)
+    df_modificado["DAP_C"] = (df_modificado["CAP_C"] / np.pi) / 100
+
+    # Converte para numérico (garante que DAP_C e ALT sejam float)
     df_modificado["DAP_C"] = pd.to_numeric(df_modificado["DAP_C"], errors='coerce')
     df_modificado["ALT"] = pd.to_numeric(df_modificado["ALT"], errors='coerce')
 
     # Cálculo do Volume_m3_C
     df_modificado["Volume_m3_C"] = ((df_modificado["DAP_C"] ** 2) * np.pi / 4) * df_modificado["ALT"] * 0.7
 
-    # Normalizando a coluna "Categoria"
+    # Normaliza a coluna "Categoria" para minúsculas e remove espaços extras
     df_modificado["Categoria"] = df_modificado["Categoria"].astype(str).str.strip().str.lower()
 
-    # Filtrando árvores das categorias "corte"
+    # Filtra os registros com categoria "corte"
     df_filtrado = df_modificado[df_modificado["Categoria"].isin(["corte"])]
-    
-    # Se não houver árvores filtradas, define um DataFrame vazio
+
     if df_filtrado.empty:
         print("Nenhuma árvore foi categorizada como 'corte'.")
         df_tabelaDeAjusteVol = df_modificado[["ut", "hac"]].drop_duplicates()
@@ -254,30 +270,30 @@ def ajustarVolumeHect(df_saida):
         df_tabelaDeAjusteVol["diminuir"] = 0
         df_tabelaDeAjusteVol["aumentar"] = 0
     else:
-        # Contando número de árvores por UT
+        # Agrupa para contar árvores e somar volumes por UT
         contagem_arvores = df_filtrado.groupby("ut").size().reset_index(name="num_arvores")
-
-        # Calculando volume total por UT
         volume_total_por_ut = df_filtrado.groupby("ut")["Volume_m3_C"].sum().reset_index()
         volume_total_por_ut.rename(columns={"Volume_m3_C": "volume_total"}, inplace=True)
         
-        # Criando df_tabelaDeAjusteVol
+        # Cria a tabela de ajuste com UT e Hectares únicos
         df_tabelaDeAjusteVol = df_modificado[["ut", "hac"]].drop_duplicates()
+        print("Dados iniciais de UT e Hectares:")
         print(df_tabelaDeAjusteVol)
 
-        # Calcula o volume máximo como hectáres * 30
+        # Calcula o volume máximo como (hectares * 30)
         df_tabelaDeAjusteVol["volume_max"] = df_tabelaDeAjusteVol["hac"] * 30
 
-        # Atualizando os valores de árvores e volume total
+        # Faz merge para incorporar contagem e volume total
         df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.merge(contagem_arvores, on="ut", how="left").fillna(0)
         df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.merge(volume_total_por_ut, on="ut", how="left").fillna(0)
 
-        # Calcula o volume por hectare (evita divisão por zero)
+        # Calcula o volume por hectare (V³/ha)
         df_tabelaDeAjusteVol["volume_por_hectare"] = df_tabelaDeAjusteVol.apply(
             lambda row: row["volume_total"] / row["hac"] if row["hac"] > 0 else 0, axis=1
         )
         
-        # Calculando as diferenças para "diminuir" ou "aumentar"
+        # Calcula as diferenças: se o volume total for maior que o volume máximo, a diferença para diminuir;
+        # caso contrário, a diferença para aumentar
         df_tabelaDeAjusteVol["diminuir"] = df_tabelaDeAjusteVol.apply(
             lambda row: row["volume_total"] - row["volume_max"] if row["volume_total"] > row["volume_max"] else 0, axis=1
         )
@@ -285,20 +301,25 @@ def ajustarVolumeHect(df_saida):
             lambda row: row["volume_max"] - row["volume_total"] if row["volume_total"] < row["volume_max"] else 0, axis=1
         )
 
-    # Convertendo número de árvores para inteiro
+    # Converte a contagem de árvores para inteiro
     df_tabelaDeAjusteVol["num_arvores"] = df_tabelaDeAjusteVol["num_arvores"].astype(int)
 
-    # Criando as colunas DAP, CAP e ALT se não existirem e preenchendo com 0 se necessário
-    for col in ["DAP", "CAP", "ALT"]:
-        if col not in df_tabelaDeAjusteVol.columns:
-            df_tabelaDeAjusteVol[col] = 0  # Criando as colunas com valor 0
+    # Garante que a coluna DAP_t exista
+    if "DAP_t" not in df_tabelaDeAjusteVol.columns:
+        df_tabelaDeAjusteVol["DAP_t"] = 0
 
-    # Garantindo que valores nulos ou negativos sejam preenchidos com 0
-    df_tabelaDeAjusteVol["DAP"] = df_tabelaDeAjusteVol["DAP"].apply(lambda x: x if x > 0 else 0)
-    df_tabelaDeAjusteVol["CAP"] = df_tabelaDeAjusteVol["CAP"].apply(lambda x: x if x > 0 else 0)
-    df_tabelaDeAjusteVol["ALT"] = df_tabelaDeAjusteVol["ALT"].apply(lambda x: x if x > 0 else 0)
+    # Incorpora os valores de CAP e ALT diretamente: cria DataFrames auxiliares com valores únicos por UT
+    df_cap = df_modificado[["ut", "CAP"]].drop_duplicates(subset="ut")
+    df_alt = df_modificado[["ut", "ALT"]].drop_duplicates(subset="ut")
+    df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.merge(df_cap, on="ut", how="left")
+    df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.merge(df_alt, on="ut", how="left")
+    # Agora, as colunas "CAP" e "ALT" do df_tabelaDeAjusteVol possuem os valores desejados
 
-    # Inserindo os novos valores na tabela
+    # Limpa a Treeview table_ut_vol para evitar duplicação
+    for child in table_ut_vol.get_children():
+        table_ut_vol.delete(child)
+
+    # Insere os valores na Treeview table_ut_vol
     for _, row in df_tabelaDeAjusteVol.iterrows():
         ut_val = f"{row['ut']:.0f}"
         hectares_val = f"{row['hac']:.5f}"
@@ -308,25 +329,24 @@ def ajustarVolumeHect(df_saida):
         volume_por_hect = f"{row['volume_por_hectare']:.2f}"
         diminuir_val = f"{row['diminuir']:.3f}"
         aumentar_val = f"{row['aumentar']:.3f}"
-        DAP_val = f"{row['DAP']:.2f}"
+        DAP_val = f"{row['DAP_t']:.2f}"
         CAP_val = f"{row['CAP']:.1f}"
         ALT_val = f"{row['ALT']:.1f}"
 
-        # Inserindo os valores na tabela
         table_ut_vol.insert("", "end", values=(ut_val, hectares_val, num_arvores,
                                                 volume_total, volume_max, diminuir_val,
                                                 aumentar_val, volume_por_hect,
                                                 DAP_val, CAP_val, ALT_val))
-    # Debug: Mostrando os dados atualizados
     print("UT, Hectares, Número de Árvores e Volume Total Atualizados:")
     print(df_tabelaDeAjusteVol)
 
-    # Exportando para Excel
-    df_modificado = df_modificado[["UT", "Faixa", "Placa", "Nome Vulgar", "CAP", "CAP_C", "ALT", "QF",
+    # Exporta para Excel
+    df_modificado = df_modificado[["UT", "Faixa", "Placa", "Nome Vulgar", "CAP", "CAP_C", "ALT", "ALT_C", "QF",
                                     "X", "Y", "DAP", "DAP_C", "Volume_m3", "Volume_m3_C", "DM", "Categoria"]]
     diretorio = os.path.dirname(entrada1_var.get())
     arquivo_saida = os.path.join(diretorio, "Planilha ajustada - IFDIGITAL 3.0.xlsx")
     df_modificado.to_excel(arquivo_saida, index=False, engine="xlsxwriter")
+
 
 def processar_planilhas():
     
@@ -721,85 +741,120 @@ def abrir_janela_valores_padroes_callback():
 colunas_editaveis = [ "CAP", "ALT"]
 
 def editar_celula_volume(event):
-    """Permite editar apenas as colunas CAP e ALT ao dar duplo clique."""
-    global df_tabelaDeAjusteVol
-    # Obtém o item e a coluna clicada
-    item_selecionado = table_ut_vol.focus()  # Captura a linha selecionada
-    coluna_selecionada = table_ut_vol.identify_column(event.x)
+    """
+    Permite editar as colunas CAP e ALT ao dar duplo clique em uma célula da Treeview (table_ut_vol).
+    Apenas colunas especificadas em 'colunas_editaveis' podem ser editadas.
+    """
+    global df_tabelaDeAjusteVol, df_valores_atualizados
 
+    # Captura o item (linha) selecionado
+    item_selecionado = table_ut_vol.focus()
     if not item_selecionado:
         return
 
-    # Obtém índice da coluna (converte "#x" para índice, ex: "#2" → 1)
-    col_index = int(coluna_selecionada[1:]) - 1
-    col_nome = table_ut_vol["columns"][col_index]  # Nome da coluna
+    # Identifica a coluna clicada a partir da coordenada x do evento
+    coluna_selecionada = table_ut_vol.identify_column(event.x)
+    try:
+        # Converte, por exemplo, "#2" para índice 1 (0-indexado)
+        col_index = int(coluna_selecionada.lstrip("#")) - 1
+    except Exception as e:
+        print("Erro ao identificar a coluna:", e)
+        return
 
-    # Verifica se a coluna é editável
+    # Obtém o nome da coluna correspondente
+    col_nome = table_ut_vol["columns"][col_index]
+    # Verifica se a coluna é editável (lista global definida, por exemplo: colunas_editaveis = ["CAP", "ALT"])
     if col_nome not in colunas_editaveis:
         return
 
-    # Obtém as coordenadas da célula
-    x, y, largura, altura = table_ut_vol.bbox(item_selecionado, col_index)
+    # Obtém as coordenadas da célula para posicionar o widget de edição (Entry)
+    bbox = table_ut_vol.bbox(item_selecionado, col_index)
+    if not bbox:
+        return
+    x, y, largura, altura = bbox
 
-    # Obtém o valor atual
-    valores = table_ut_vol.item(item_selecionado, "values")
+    # Obtém o valor atual da célula
+    valores = list(table_ut_vol.item(item_selecionado, "values"))
     valor_atual = valores[col_index]
 
-    # Criar Entry para edição
+    # Cria o widget Entry para edição, posicionando-o na célula
     entry = tk.Entry(table_ut_vol)
     entry.place(x=x, y=y, width=largura, height=altura)
     entry.insert(0, valor_atual)
     entry.focus()
 
     def salvar_novo_valor(event=None):
-        global df_tabelaDeAjusteVol  # Garante acesso ao DataFrame global
-        novo_valor = entry.get()
+        """
+        Função interna para salvar o novo valor digitado.
+        Atualiza a Treeview e os DataFrames df_tabelaDeAjusteVol e df_valores_atualizados.
+        """
+        global df_tabelaDeAjusteVol, df_valores_atualizados
 
+        import pandas as pd
+        import numpy as np
+
+        novo_valor_str = entry.get()
         try:
-            novo_valor = float(novo_valor)  # Converte para número
+            novo_valor = float(novo_valor_str)
         except ValueError:
             entry.destroy()
-            return  # Sai sem salvar se o valor não for numérico
+            return
 
-        # Atualiza a exibição na Treeview
-        valores_atualizados = list(table_ut_vol.item(item_selecionado, "values"))
-        valores_atualizados[col_index] = novo_valor
-        table_ut_vol.item(item_selecionado, values=valores_atualizados)
+        # Atualiza a lista de valores da linha na Treeview
+        valores[col_index] = novo_valor
+        table_ut_vol.item(item_selecionado, values=valores)
 
-        # Obtém o valor da coluna "ut" para encontrar a linha correspondente no DataFrame
-        ut_val = float(valores_atualizados[0])  # O primeiro valor da linha é o "ut"
+        # Obtém o valor da primeira coluna (UT) e converte para float
+        try:
+            ut_val = float(valores[0])
+        except ValueError:
+            print("Erro ao converter UT para float.")
+            entry.destroy()
+            return
 
-        # Verifica se a coluna "ut" existe antes de acessar
+        # Verifica se "ut" existe em df_tabelaDeAjusteVol
         if "ut" not in df_tabelaDeAjusteVol.columns:
             print("Erro: A coluna 'ut' não existe no DataFrame!")
             entry.destroy()
             return
 
-        # Encontra o índice correto no DataFrame
-        index_df = df_tabelaDeAjusteVol[df_tabelaDeAjusteVol["ut"] == ut_val].index
-
-        if index_df.empty:
+        # Localiza a linha no DataFrame correspondente à UT
+        index_df_series = df_tabelaDeAjusteVol[df_tabelaDeAjusteVol["ut"] == ut_val].index
+        if index_df_series.empty:
             print(f"Erro: UT {ut_val} não encontrado no DataFrame!")
             entry.destroy()
             return
+        index_df = index_df_series[0]
 
-        # A variável `index_df` pode ser uma série de índices, então vamos garantir que pegamos o primeiro
-        index_df = index_df[0]  # Acessando o primeiro índice se houver múltiplos
+        # Atualiza o valor da coluna editada no DataFrame de ajuste
+        df_tabelaDeAjusteVol.at[index_df, col_nome] = novo_valor
 
-        # Atualiza o valor no DataFrame
-        df_tabelaDeAjusteVol.at[index_df, col_nome] = novo_valor  # Usando .at para indexação precisa
-        print(f"Valor atualizado: UT={ut_val}, {col_nome}={novo_valor}")  # Debug
+        # Se a coluna editada for CAP ou ALT, atualiza também o DataFrame global de valores atualizados
+        if col_nome in ["CAP", "ALT"]:
+            # Se df_valores_atualizados não existir ou estiver vazio, inicializa-o
+            if 'df_valores_atualizados' not in globals() or df_valores_atualizados.empty:
+                df_valores_atualizados = pd.DataFrame(columns=["ut", "CAP", "ALT"])
+            # Procura se já existe uma linha para essa UT
+            idx_val_series = df_valores_atualizados[df_valores_atualizados["ut"] == ut_val].index
+            if not idx_val_series.empty:
+                df_valores_atualizados.at[idx_val_series[0], col_nome] = novo_valor
+            else:
+                nova_linha = {"ut": ut_val, "CAP": np.nan, "ALT": np.nan}
+                nova_linha[col_nome] = novo_valor
+                df_valores_atualizados = pd.concat([df_valores_atualizados, pd.DataFrame([nova_linha])], ignore_index=True)
 
-        # Atualiza também na tabela visual
-        table_ut_vol.item(item_selecionado, values=valores_atualizados)
-
-        entry.destroy()  # Fecha o campo Entry
+        print(f"Valor atualizado: UT={ut_val}, {col_nome}={novo_valor}")
+        print("DataFrame de ajuste atualizado:")
         print(df_tabelaDeAjusteVol)
+        print("DataFrame de valores atualizados:")
+        print(df_valores_atualizados)
 
+        entry.destroy()
 
-    # Bind para salvar ao pressionar Enter ou sair do campo
+    # Vincula a função salvar_novo_valor aos eventos Return e FocusOut
     entry.bind("<Return>", salvar_novo_valor)
     entry.bind("<FocusOut>", salvar_novo_valor)
+
 
 
 # Interface gráfica
@@ -929,7 +984,7 @@ for col in colunas_tabela2:
     table_ut_vol.column(col, width=70, anchor="center")
 
 table_ut_vol.pack(pady=10)
-table_ut_vol.config(height=10)
+table_ut_vol.config(height=20)
 
 # Adiciona evento de duplo clique para editar
 table_ut_vol.bind("<Double-1>", editar_celula_volume)
