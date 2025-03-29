@@ -218,35 +218,46 @@ def limpar_lista_selecionados():
 
 def ajustarVolumeHect(df_saida):
     global df_tabelaDeAjusteVol, df_valores_atualizados
+    import numpy as np
+    import pandas as pd
+    import os
 
     # Cria uma cópia do DataFrame original para não modificá-lo
     df_modificado = df_saida.copy()
 
-    # Se houver um DataFrame global com valores atualizados, incorpora CAP e ALT
-    if 'df_valores_atualizados' in globals() and not df_valores_atualizados.empty:
-        # Realiza o merge com base em UT; pressupõe que df_valores_atualizados tenha colunas "ut", "CAP" e "ALT"
-        df_modificado = df_modificado.merge(
-            df_valores_atualizados, left_on="UT", right_on="ut", how="left", suffixes=("", "_atualizado")
-        )
-        # Para cada coluna de interesse, usa o valor atualizado se existir, senão mantém o original
-        for col in ["CAP", "ALT"]:
-            if f"{col}_atualizado" in df_modificado.columns:
-                df_modificado[col] = df_modificado[f"{col}_atualizado"].combine_first(df_modificado[col])
-        # Remove as colunas auxiliares que vieram do merge, mas somente as que existem
-        cols_aux = [f"{col}_atualizado" for col in ["CAP", "ALT", "ut"]]
-        cols_to_drop = [c for c in cols_aux if c in df_modificado.columns]
-        if cols_to_drop:
-            df_modificado.drop(columns=cols_to_drop, inplace=True)
+    # Cria as colunas CAP_m e ALT_m com valores padrão: CAP_m = 1, ALT_m = 0
+    df_modificado["CAP_m"] = 1
+    df_modificado["ALT_m"] = 0
 
-    # Cria as colunas "ut" e "hac" copiando dos campos originais
-    # Esses campos serão usados para agrupar os dados
+    # Se houver um DataFrame global com valores atualizados, incorpora os valores de CAP_m e ALT_m
+    if 'df_valores_atualizados' in globals() and not df_valores_atualizados.empty:
+        # Se as colunas CAP_m e ALT_m não existem em df_valores_atualizados, tenta copiá-las de CAP e ALT
+        for col in ["CAP_m", "ALT_m"]:
+            if col not in df_valores_atualizados.columns and col.replace("_m", "") in df_valores_atualizados.columns:
+                df_valores_atualizados[col] = df_valores_atualizados[col.replace("_m", "")]
+        # Realiza o merge usando a chave UT (do df_modificado) e "ut" (do df_valores_atualizados)
+        df_modificado = df_modificado.merge(
+            df_valores_atualizados[["ut", "CAP_m", "ALT_m"]],
+            left_on="UT", right_on="ut", how="left", suffixes=("", "_novo")
+        )
+        # Para CAP_m e ALT_m, se houver valor atualizado (não NaN), utiliza-o; senão, mantém o padrão
+        for col in ["CAP_m", "ALT_m"]:
+            if f"{col}_novo" in df_modificado.columns:
+                df_modificado[col] = df_modificado[f"{col}_novo"].combine_first(df_modificado[col])
+        # Remove as colunas auxiliares geradas no merge
+        cols_to_drop = [f"{col}_novo" for col in ["CAP_m", "ALT_m"]]
+        df_modificado.drop(columns=cols_to_drop, inplace=True)
+        # Remove a coluna "ut" proveniente do merge, se existir (já temos "UT")
+        if "ut" in df_modificado.columns and "UT" in df_modificado.columns:
+            df_modificado.drop(columns=["ut"], inplace=True)
+
+    # Cria as colunas "ut" e "hac" (para facilitar os agrupamentos)
     df_modificado["ut"] = df_modificado["UT"]
     df_modificado["hac"] = df_modificado["UT_AREA_HA"]
 
-    # Cria as colunas de cálculo: ALT_C e CAP_C (se necessário)
+    # Cria as colunas de cálculo: ALT_C e CAP_C e calcula DAP_C a partir de CAP_C
     df_modificado["ALT_C"] = df_modificado["ALT"]
     df_modificado["CAP_C"] = df_modificado["CAP"]
-    # Calcula DAP_C a partir de CAP_C (se for essa a intenção)
     df_modificado["DAP_C"] = (df_modificado["CAP_C"] / np.pi) / 100
 
     # Converte para numérico (garante que DAP_C e ALT sejam float)
@@ -256,34 +267,35 @@ def ajustarVolumeHect(df_saida):
     # Cálculo do Volume_m3_C
     df_modificado["Volume_m3_C"] = ((df_modificado["DAP_C"] ** 2) * np.pi / 4) * df_modificado["ALT"] * 0.7
 
-    # Normaliza a coluna "Categoria" para minúsculas e remove espaços extras
+    # Normaliza a coluna "Categoria"
     df_modificado["Categoria"] = df_modificado["Categoria"].astype(str).str.strip().str.lower()
 
-    # Filtra os registros com categoria "corte"
+    # Filtra os registros com Categoria "corte"
     df_filtrado = df_modificado[df_modificado["Categoria"].isin(["corte"])]
 
     if df_filtrado.empty:
         print("Nenhuma árvore foi categorizada como 'corte'.")
-        df_tabelaDeAjusteVol = df_modificado[["ut", "hac"]].drop_duplicates()
+        # Mantemos CAP_m e ALT_m na seleção para persistência
+        df_tabelaDeAjusteVol = df_modificado[["ut", "hac", "CAP_m", "ALT_m"]].drop_duplicates()
         df_tabelaDeAjusteVol["num_arvores"] = 0
         df_tabelaDeAjusteVol["volume_total"] = 0
         df_tabelaDeAjusteVol["diminuir"] = 0
         df_tabelaDeAjusteVol["aumentar"] = 0
     else:
-        # Agrupa para contar árvores e somar volumes por UT
+        # Agrupa para contar o número de árvores e somar o volume total por UT
         contagem_arvores = df_filtrado.groupby("ut").size().reset_index(name="num_arvores")
         volume_total_por_ut = df_filtrado.groupby("ut")["Volume_m3_C"].sum().reset_index()
         volume_total_por_ut.rename(columns={"Volume_m3_C": "volume_total"}, inplace=True)
         
-        # Cria a tabela de ajuste com UT e Hectares únicos
-        df_tabelaDeAjusteVol = df_modificado[["ut", "hac"]].drop_duplicates()
-        print("Dados iniciais de UT e Hectares:")
+        # Cria o DataFrame de ajuste com UT, Hectares, CAP_m e ALT_m para preservar os valores de edição
+        df_tabelaDeAjusteVol = df_modificado[["ut", "hac", "CAP_m", "ALT_m"]].drop_duplicates()
+        print("Dados iniciais de UT, Hectares, CAP_m e ALT_m:")
         print(df_tabelaDeAjusteVol)
 
         # Calcula o volume máximo como (hectares * 30)
         df_tabelaDeAjusteVol["volume_max"] = df_tabelaDeAjusteVol["hac"] * 30
 
-        # Faz merge para incorporar contagem e volume total
+        # Faz merge para incorporar a contagem de árvores e o volume total
         df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.merge(contagem_arvores, on="ut", how="left").fillna(0)
         df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.merge(volume_total_por_ut, on="ut", how="left").fillna(0)
 
@@ -292,8 +304,7 @@ def ajustarVolumeHect(df_saida):
             lambda row: row["volume_total"] / row["hac"] if row["hac"] > 0 else 0, axis=1
         )
         
-        # Calcula as diferenças: se o volume total for maior que o volume máximo, a diferença para diminuir;
-        # caso contrário, a diferença para aumentar
+        # Calcula as diferenças para "diminuir" e "aumentar"
         df_tabelaDeAjusteVol["diminuir"] = df_tabelaDeAjusteVol.apply(
             lambda row: row["volume_total"] - row["volume_max"] if row["volume_total"] > row["volume_max"] else 0, axis=1
         )
@@ -301,19 +312,33 @@ def ajustarVolumeHect(df_saida):
             lambda row: row["volume_max"] - row["volume_total"] if row["volume_total"] < row["volume_max"] else 0, axis=1
         )
 
-    # Converte a contagem de árvores para inteiro
+    # Converte o número de árvores para inteiro
     df_tabelaDeAjusteVol["num_arvores"] = df_tabelaDeAjusteVol["num_arvores"].astype(int)
 
     # Garante que a coluna DAP_t exista
     if "DAP_t" not in df_tabelaDeAjusteVol.columns:
         df_tabelaDeAjusteVol["DAP_t"] = 0
 
-    # Incorpora os valores de CAP e ALT diretamente: cria DataFrames auxiliares com valores únicos por UT
-    df_cap = df_modificado[["ut", "CAP"]].drop_duplicates(subset="ut")
-    df_alt = df_modificado[["ut", "ALT"]].drop_duplicates(subset="ut")
-    df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.merge(df_cap, on="ut", how="left")
-    df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.merge(df_alt, on="ut", how="left")
-    # Agora, as colunas "CAP" e "ALT" do df_tabelaDeAjusteVol possuem os valores desejados
+    # Se houver df_valores_atualizados, já foram mesclados anteriormente.
+    # Caso contrário, os padrões em df_modificado já foram definidos (CAP_m=1, ALT_m=0)
+    # Aqui, opcionalmente, você pode realizar outro merge para garantir que os valores persistam.
+    if 'df_valores_atualizados' in globals() and not df_valores_atualizados.empty:
+        # Se as colunas CAP_m e ALT_m não existem, já foram criadas no início (padrão 1 e 0)
+        df_val = df_valores_atualizados[["ut", "CAP_m", "ALT_m"]].drop_duplicates(subset="ut")
+        df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.merge(df_val, on="ut", how="left", suffixes=("", "_novo"))
+        # Se existir valor atualizado (não NaN) para CAP_m e ALT_m, usa-o; senão, mantém o já existente
+        for col in ["CAP_m", "ALT_m"]:
+            if f"{col}_novo" in df_tabelaDeAjusteVol.columns:
+                df_tabelaDeAjusteVol[col] = df_tabelaDeAjusteVol[f"{col}_novo"].combine_first(df_tabelaDeAjusteVol[col])
+        # Remove as colunas auxiliares
+        cols_to_drop = [f"{col}_novo" for col in ["CAP_m", "ALT_m"]]
+        df_tabelaDeAjusteVol.drop(columns=cols_to_drop, inplace=True)
+        # Preenche NaN com os padrões desejados (para UTs sem atualização)
+        df_tabelaDeAjusteVol["CAP_m"] = df_tabelaDeAjusteVol["CAP_m"].fillna(1)
+        df_tabelaDeAjusteVol["ALT_m"] = df_tabelaDeAjusteVol["ALT_m"].fillna(0)
+    else:
+        df_tabelaDeAjusteVol["CAP_m"] = 1
+        df_tabelaDeAjusteVol["ALT_m"] = 0
 
     # Limpa a Treeview table_ut_vol para evitar duplicação
     for child in table_ut_vol.get_children():
@@ -330,9 +355,8 @@ def ajustarVolumeHect(df_saida):
         diminuir_val = f"{row['diminuir']:.3f}"
         aumentar_val = f"{row['aumentar']:.3f}"
         DAP_val = f"{row['DAP_t']:.2f}"
-        CAP_val = f"{row['CAP']:.1f}"
-        ALT_val = f"{row['ALT']:.1f}"
-
+        CAP_val = f"{row['CAP_m']:.1f}"
+        ALT_val = f"{row['ALT_m']:.1f}"
         table_ut_vol.insert("", "end", values=(ut_val, hectares_val, num_arvores,
                                                 volume_total, volume_max, diminuir_val,
                                                 aumentar_val, volume_por_hect,
@@ -340,12 +364,13 @@ def ajustarVolumeHect(df_saida):
     print("UT, Hectares, Número de Árvores e Volume Total Atualizados:")
     print(df_tabelaDeAjusteVol)
 
-    # Exporta para Excel
-    df_modificado = df_modificado[["UT", "Faixa", "Placa", "Nome Vulgar", "CAP", "CAP_C", "ALT", "ALT_C", "QF",
-                                    "X", "Y", "DAP", "DAP_C", "Volume_m3", "Volume_m3_C", "DM", "Categoria"]]
+    # Exporta para Excel usando o df_modificado com os cálculos originais
+    df_export = df_modificado[["UT", "Faixa", "Placa", "Nome Vulgar", "CAP", "CAP_C", "CAP_m", "ALT", "ALT_C", "ALT_m", "QF",
+                               "X", "Y", "DAP", "DAP_C", "Volume_m3", "Volume_m3_C", "DM", "Categoria"]]
     diretorio = os.path.dirname(entrada1_var.get())
     arquivo_saida = os.path.join(diretorio, "Planilha ajustada - IFDIGITAL 3.0.xlsx")
-    df_modificado.to_excel(arquivo_saida, index=False, engine="xlsxwriter")
+    df_export.to_excel(arquivo_saida, index=False, engine="xlsxwriter")
+
 
 
 def processar_planilhas():
