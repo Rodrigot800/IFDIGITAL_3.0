@@ -270,8 +270,19 @@ def ajustarVolumeHect():
 
     df_modificado["ut"] = df_modificado["UT"]
     df_modificado["hac"] = df_modificado["UT_AREA_HA"]
+
+    # Calculando a coluna 'ALT_C'
     df_modificado["ALT_C"] = df_modificado["ALT"] + df_modificado["ALT_m"]
+
+    # Aplicando as condições
+    df_modificado["ALT_C"] = df_modificado.apply(
+        lambda row: 10 if row["ALT"] > 10 and row["ALT_C"] <= 10 else 
+                    row["ALT_C"] if row["ALT"] > 10 else 
+                    row["ALT"] if row["ALT_C"] < row["ALT"] else row["ALT_C"],
+        axis=1
+    )
     df_modificado["CAP_C"] = df_modificado["CAP"] * df_modificado["CAP_m"]
+
     df_modificado["DAP_C"] = ((df_modificado["CAP_C"] / np.pi) / 100 )
 
     df_modificado["DAP_C"] = pd.to_numeric(df_modificado["DAP_C"], errors='coerce')
@@ -345,12 +356,12 @@ def ajustarVolumeHect():
         num_arvores = f"{row['num_arvores']:.0f}"
         volume_total = f"{row['volume_total']:.5f}"
         volume_max = f"{row['volume_max']:.5f}"
-        volume_por_hect = f"{row['volume_por_hectare']:.2f}"
+        volume_por_hect = f"{row['volume_por_hectare']:.3f}"
         diminuir_val = f"{row['diminuir']:.3f}"
         aumentar_val = f"{row['aumentar']:.3f}"
         dif_pct_val = f"{row['dif_pct']:.2f}"  # Exibe a diferença percentual
-        CAP_val = f"{row['CAP_m']:.1f}"
-        ALT_val = f"{row['ALT_m']:.1f}"
+        CAP_val = f"{row['CAP_m']:.3f}"
+        ALT_val = f"{row['ALT_m']:.2f}"
         table_ut_vol.insert("", "end", values=(ut_val, hectares_val, num_arvores,
                                                 volume_total, volume_max, diminuir_val,
                                                 aumentar_val, volume_por_hect,
