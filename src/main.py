@@ -165,10 +165,9 @@ def adicionar_selecao(event):
     dap_min = config.getfloat("DEFAULT", "dapmin", fallback=5)
     qf = config.getint("DEFAULT", "qf", fallback=3)
     alt = config.getfloat("DEFAULT", "alt", fallback=0)
-    cap = config.getfloat("DEFAULT", "cap", fallback=2.5)
 
     # Adiciona à tabela com os valores atualizados do config.ini
-    valores_atualizados = (nome, dap_max, dap_min, qf, alt, cap)
+    valores_atualizados = (nome, dap_max, dap_min, qf, alt)
     table_selecionados.insert("", "end", values=valores_atualizados)
 
 def editar_linha(event):
@@ -210,7 +209,6 @@ def selecionar_todos():
     dap_min = config.getfloat("DEFAULT", "dapmin", fallback=5)
     qf = config.getint("DEFAULT", "qf", fallback=3)
     alt = config.getfloat("DEFAULT", "alt", fallback=0)
-    cap = config.getfloat("DEFAULT", "cap", fallback=2.5)
 
     # Percorre todos os nomes vulgares e adiciona à tabela se não existirem
     for nome in nomes_vulgares:
@@ -219,15 +217,13 @@ def selecionar_todos():
         
         if not is_duplicate:  # Só adiciona se o nome não estiver na tabela
             # Adiciona os dados na tabela com valores do config.ini
-            valores_atualizados = (nome, dap_max, dap_min, qf, alt, cap)
+            valores_atualizados = (nome, dap_max, dap_min, qf, alt)
             table_selecionados.insert("", "end", values=valores_atualizados)
             print(f"{nome} foi adicionado à tabela.")  # Mensagem de depuração para verificar se está sendo adicionado
         else:
             print(f"{nome} já está na tabela.")  # Mensagem de depuração para duplicação
 
     print("Todos os itens de 'nomes_vulgares' foram processados.")
-
-
 
 # Função para remover o último item da tabela
 def remover_ultimo_selecionado():
@@ -271,31 +267,88 @@ def ajustarVolumeHect():
     df_modificado["ut"] = df_modificado["UT"]
     df_modificado["hac"] = df_modificado["UT_AREA_HA"]
 
-    # Calculando a coluna 'ALT_C'
-    df_modificado["ALT_C"] = df_modificado["ALT"] + df_modificado["ALT_m"]
+    # # Calculando a coluna 'ALT_C'
+    # df_modificado["ALT_C"] = df_modificado["ALT"] + df_modificado["ALT_m"]
 
-    # Aplicando as condições
+    # # Aplicando as condições
+    # # df_modificado["ALT_C"] = df_modificado.apply(
+    # #     lambda row: 10 if row["ALT"] > 10 and row["ALT_C"] <= 10 else 
+    # #                 row["ALT_C"] if row["ALT"] > 10 else 
+    # #                 row["ALT"] if row["ALT_C"] < row["ALT"] else row["ALT_C"],
+    # #     axis=1
+    # # )
+    # # Calculando a coluna 'CAP_C'
+    # df_modificado["CAP_C"] = df_modificado["CAP"] * df_modificado["CAP_m"]
+
+    # # df_modificado["CAP_C"] = df_modificado.apply(
+    # # lambda row: 158 if row["CAP"] > 158 and row["CAP_C"] <= 158 else  
+    # #             row["CAP_C"] if row["CAP"] > 158 else  
+    # #             row["CAP"] if row["CAP_C"] < row["CAP"] else 
+    # #             min(row["CAP_C"], 628) if row["CAP_C"] >= 680 else row["CAP_C"],
+    # #     axis=1
+    # # )
+
+    # Calculando a coluna 'ALT_C' dependendo da condição de 'Categoria'
+    df_modificado["ALT_C"] = df_modificado.apply(
+        lambda row: row["ALT"] + row["ALT_m"] if row["Categoria"] == "CORTE" else row["ALT"],
+        axis=1
+    )
+
+    # Calculando a coluna 'CAP_C' dependendo da condição de 'Categoria'
+    df_modificado["CAP_C"] = df_modificado.apply(
+        lambda row: row["CAP"] * row["CAP_m"] if row["Categoria"] == "CORTE" else row["CAP"],
+        axis=1
+    )
+
+
+    df_modificado["DAP_C"] = df_modificado.apply(
+        lambda row: ((row["CAP_C"] / np.pi) / 100) if row["Categoria"] == "CORTE" else row["DAP"],
+        axis=1
+    )
+
+    # Aplicando as condições em 'ALT_C' somente para linhas com 'Categoria' igual a 'CORTE'
     df_modificado["ALT_C"] = df_modificado.apply(
         lambda row: 10 if row["ALT"] > 10 and row["ALT_C"] <= 10 else 
                     row["ALT_C"] if row["ALT"] > 10 else 
-                    row["ALT"] if row["ALT_C"] < row["ALT"] else row["ALT_C"],
+                    row["ALT"] if row["ALT_C"] < row["ALT"] else row["ALT_C"]
+                    if row["Categoria"] == "CORTE" else row["ALT_C"],  # Caso não seja CORTE, mantém o valor original
         axis=1
     )
-    df_modificado["CAP_C"] = df_modificado["CAP"] * df_modificado["CAP_m"]
 
-    df_modificado["DAP_C"] = ((df_modificado["CAP_C"] / np.pi) / 100 )
+    # Calculando a coluna 'CAP_C' somente para linhas com 'Categoria' igual a 'CORTE'
+    df_modificado["CAP_C"] = df_modificado.apply(
+        lambda row: row["CAP"] * row["CAP_m"] if row["Categoria"] == "CORTE" else row["CAP"],
+        axis=1
+    )
+
+    # Aplicando as condições em 'CAP_C' somente para linhas com 'Categoria' igual a 'CORTE'
+    df_modificado["CAP_C"] = df_modificado.apply(
+        lambda row: 158 if row["CAP"] > 158 and row["CAP_C"] <= 158 else  
+                    row["CAP_C"] if row["CAP"] > 158 else  
+                    row["CAP"] if row["CAP_C"] < row["CAP"] else 
+                    min(row["CAP_C"], 628) if row["CAP_C"] >= 680 else row["CAP_C"]
+                    if row["Categoria"] == "CORTE" else row["CAP_C"],  # Caso não seja CORTE, mantém o valor original
+        axis=1
+    )
+
+    # Calculando a coluna 'DAP_C' somente para linhas com 'Categoria' igual a 'CORTE'
+    df_modificado["DAP_C"] = df_modificado.apply(
+        lambda row: ((row["CAP_C"] / np.pi) / 100) 
+            if row["Categoria"] == "CORTE" else row["DAP"],  # Caso não seja CORTE, mantém o valor original
+        axis=1
+    )
 
     df_modificado["DAP_C"] = pd.to_numeric(df_modificado["DAP_C"], errors='coerce')
     df_modificado["ALT"] = pd.to_numeric(df_modificado["ALT"], errors='coerce')
 
     df_modificado["Volume_m3_C"] = ((df_modificado["DAP_C"] ** 2) * np.pi / 4) * df_modificado["ALT_C"] * 0.7
 
-    df_modificado["Categoria"] = df_modificado["Categoria"].astype(str).str.strip().str.lower()
+    df_modificado["Categoria"] = df_modificado["Categoria"].astype(str).str.strip().str.upper()
 
-    df_filtrado = df_modificado[df_modificado["Categoria"].isin(["corte"])]
+    df_filtrado = df_modificado[df_modificado["Categoria"].isin(["CORTE"])]
 
     if df_filtrado.empty:
-        print("Nenhuma árvore foi categorizada como 'corte'.")
+        print("Nenhuma árvore foi categorizada como 'CORTE'.")
         df_tabelaDeAjusteVol = df_modificado[["ut", "hac", "CAP_m", "ALT_m", "DAP_C"]].drop_duplicates()
         df_tabelaDeAjusteVol["num_arvores"] = 0
         df_tabelaDeAjusteVol["volume_total"] = 0
@@ -446,8 +499,6 @@ def processar_planilhas():
         df_saida.loc[df_saida["Situacao"].isna() | (df_saida["Situacao"] == ""), "Situacao"] = "SEM RESTRIÇÃO"
 
 
-        
-
         def extrair_nomes_especies():
             nomes_especies = []
             for child in table_selecionados.get_children():
@@ -461,9 +512,9 @@ def processar_planilhas():
 
        
 
-        # Primeiro, marque como "REM" se a espécie não estiver selecionada.
+        # Primeiro, marque como "REMANESCENTE" se a espécie não estiver selecionada.
         df_saida["Categoria"] = df_saida["Nome Vulgar"].apply(
-            lambda nome: "REM" if nome.upper() not in nomes_selecionados else "CORTE"
+            lambda nome: "REMANESCENTE" if nome.upper() not in nomes_selecionados else "CORTE"
         )
 
         # Função para extrair valores da tabela
@@ -479,8 +530,7 @@ def processar_planilhas():
                             "dap_min": float(valores[1]) if valores[1] else 0.0,
                             "dap_max": float(valores[2]) if valores[2] else 0.0,
                             "qf": int(valores[3]) if valores[3] else 0,
-                            "alt": float(valores[4]) if valores[4] else 0.0,
-                            "cap": float(valores[5]) if valores[5] else 0.0
+                            "alt": float(valores[4]) if valores[4] else 0.0
                         }
                     except ValueError as e:
                         print(f"Erro ao processar valores para {nome}: {e}")
@@ -502,24 +552,24 @@ def processar_planilhas():
             QF = especie_parametros["qf"]
             alt = especie_parametros["alt"]
 
-            # Atualizar a coluna "Categoria" com "REM" se a situação for "protegida"
+            # Atualizar a coluna "Categoria" com "REMANESCENTE" se a situação for "protegida"
             situacao = str(row["Situacao"]).strip().lower() if pd.notna(row["Situacao"]) else ""
 
-            # Se for protegida, marcar como REM
+            # Se for protegida, marcar como REMANESCENTE
             if situacao == "protegida":
-                return "REM"
+                return "REMANESCENTE"
 
-            # Se o DAP for menor que DAPmin ou maior/igual a DAPmax, marcar como REM
+            # Se o DAP for menor que DAPmin ou maior/igual a DAPmax, marcar como REMANESCENTE
             if isinstance(row["DAP"], (float, int)) and (row["DAP"] < DAPmin or row["DAP"] >= DAPmax):
-                return "REM"
+                return "REMANESCENTE"
 
-            # Se QF for igual ao valor definido, marcar como REM
+            # Se QF for igual ao valor definido, marcar como REMANESCENTE
             if isinstance(row["QF"], int) and row["QF"] == QF:
-                return "REM"
+                return "REMANESCENTE"
 
-            # Se alt > 0 e ALT for maior que alt, marcar como REM
+            # Se alt > 0 e ALT for maior que alt, marcar como REMANESCENTE
             if isinstance(row["ALT"], (float, int)) and alt > 0 and row["ALT"] > alt:
-                return "REM"
+                return "REMANESCENTE"
 
             # Se nenhuma condição foi atendida, mantém a categoria original
             return row["Categoria"]
@@ -685,18 +735,18 @@ def processar_planilhas():
         # **Criar um identificador para marcar onde NÃO EXISTE "CORTE"**
         df_verificacao["Marcar_REM"] = df_verificacao["Qtd_Corte"] == 0
 
-        # **Criar uma lista de tuplas (UT, Nome Vulgar) onde as substitutas precisam virar REM**
+        # **Criar uma lista de tuplas (UT, Nome Vulgar) onde as substitutas precisam virar REMANESCENTE**
         remover_tuplas = df_verificacao[df_verificacao["Marcar_REM"]][["UT", "Nome Vulgar"]].apply(tuple, axis=1).tolist()
 
-        # **Atualizar df_saida para transformar "SUBSTITUTA" em "REM" onde não há cortes**
+        # **Atualizar df_saida para transformar "SUBSTITUTA" em "REMANESCENTE" onde não há cortes**
         df_saida["Categoria"] = df_saida.apply(
-            lambda row: "REM" if (row["UT"], row["Nome Vulgar"]) in remover_tuplas and row["Categoria"] == "SUBSTITUTA" else row["Categoria"],
+            lambda row: "REMANESCENTE" if (row["UT"], row["Nome Vulgar"]) in remover_tuplas and row["Categoria"] == "SUBSTITUTA" else row["Categoria"],
             axis=1
         )
 
         # **Verificar os resultados corrigidos**
-        print("\n--- Linhas que viraram REM porque não há mais CORTE dentro da UT ---")
-        print(df_saida[df_saida["Categoria"] == "REM"][["UT", "Nome Vulgar", "Categoria"]].drop_duplicates())
+        print("\n--- Linhas que viraram REMANESCENTE porque não há mais CORTE dentro da UT ---")
+        print(df_saida[df_saida["Categoria"] == "REMANESCENTE"][["UT", "Nome Vulgar", "Categoria"]].drop_duplicates())
 
         print("\n--- Contagem Final por Categoria ---")
         print(df_saida["Categoria"].value_counts())
@@ -707,7 +757,7 @@ def processar_planilhas():
         print("Contagem por Categoria:")
         print(f"CORTE: {contagem_categorias.get('CORTE', 0)}")
         print(f"SUBSTITUTA: {contagem_categorias.get('SUBSTITUTA', 0)}")
-        print(f"REM: {contagem_categorias.get('REM', 0)}")
+        print(f"REMANESCENTE: {contagem_categorias.get('REMANESCENTE', 0)}")
 
         print(f"Numero total de linhas em df_saida: {len(df_saida)}")
         
@@ -722,9 +772,10 @@ def processar_planilhas():
         print(df_saida)
         # Exporta para Excel usando o df_modificado com os cálculos originais
         df_export = df_saida[["UT", "Faixa", "Placa", "Nome Vulgar", "CAP", "CAP_C", "CAP_m", "ALT", "ALT_C", "ALT_m", "QF",
-                                "X", "Y", "DAP", "DAP_C", "Volume_m3", "Volume_m3_C", "DM", "Categoria", ]]
+                                "X", "Y", "DAP", "DAP_C", "Volume_m3", "Volume_m3_C","Latitude", "Longitude", "DM",  "Observacoes",
+                                "Categoria", "Situacao"]]
         diretorio = os.path.dirname(entrada1_var.get())
-        arquivo_saida = os.path.join(diretorio, "Planilha ajustada - IFDIGITAL 3.0.xlsx")
+        arquivo_saida = os.path.join(diretorio, "Planilha Processada - IFDIGITAL 3.0.xlsx")
         df_export.to_excel(arquivo_saida, index=False, engine="xlsxwriter")
         #salvar o arquivo no diretório
         # diretorio = os.path.dirname(entrada1_var.get())
@@ -892,6 +943,9 @@ app = tk.Tk()
 app.title("IFDIGITAL 3.0")
 app.geometry("1200x1200")
 
+# Definindo o estilo global para todos os widgets ttk
+style = ttk.Style()
+style.configure('.', font=("Arial", 10))  # Aplica a fonte Arial, tamanho 11 para todos os widgets ttk
 
 largura_janela = 1600
 altura_janela = 900
@@ -927,20 +981,27 @@ ttk.Button(frame_inputs, text="Selecionar", command=lambda: selecionar_arquivos(
 frame_lado_a_lado = tk.Frame(app)
 frame_lado_a_lado.pack(pady=10)
 
-botao_modificar_filtro = tk.Button(frame_lado_a_lado, text="Modificar Filtragem para Substituta", 
+botao_modificar_filtro = tk.Button(frame_lado_a_lado, text="Modificar Filtragem para REM", 
                                     command=abrir_janela_valores_padroes_callback)
-botao_modificar_filtro.pack(side=tk.LEFT, padx=5)
+botao_modificar_filtro.pack(side=tk.LEFT, padx=50)
 
-combobox = ttk.Combobox(frame_lado_a_lado, state="readonly", width=30,
-                        values=[
-                            "QF > Vol_m3",
-                            "Vol_m3 > QF",
-                            "Apenas QF",
-                            "Apenas Vol_m3"
-                        ])
+# Criando o Label adicional
+label_texto = ttk.Label(frame_lado_a_lado, text="Ordenação de Substituta:")  
+label_texto.pack(side=tk.LEFT, padx=(0, 0))  # Adiciona o texto à esquerda do Combobox
+
+# Criando o Combobox
+combobox = ttk.Combobox(frame_lado_a_lado, state="readonly", style="TCombobox",
+                         values=[
+                             "QF > Vol_m3",
+                             "Vol_m3 > QF",
+                             "Apenas QF",
+                             "Apenas Vol_m3"
+                         ])
 combobox.current(0)  # Seleciona a primeira opção por padrão
 combobox.bind("<<ComboboxSelected>>", update_ordering_mode)
-combobox.pack(side=tk.LEFT, padx=5)
+
+# Exibindo o Combobox
+combobox.pack(side=tk.LEFT)
 
 # Criação dos widgets que serão atualizados
 status_label = ttk.Label(app, text="")  # Inicialmente vazio
@@ -952,7 +1013,7 @@ frame_listbox_e_tabela.pack(side="left", padx=10, pady=10, fill="y")
 # Frame para Listboxes
 
 frame_listbox = ttk.LabelFrame(frame_listbox_e_tabela, text="Seleção de Nomes Vulgares", padding=(10, 10))
-frame_listbox.pack(side="left", padx=10, pady=10, fill="y")
+frame_listbox.pack(side="left", padx=10, pady=0, fill="y")
 
 
 # Criando um Frame para alinhar a Label e a Entry horizontalmente
@@ -967,7 +1028,7 @@ pesquisa_entry.pack(side="left", padx=5)
 # Vinculando evento de pesquisa
 pesquisa_entry.bind("<KeyRelease>", pesquisar_nomes)
 
-colunas_selecionados = ("Nome", "DAP <", "DAP >=", "QF = ", "ALT >", "CAP <")
+colunas_selecionados = ("Nome", "DAP <", "DAP >=", "QF = ", "ALT >")
 
 table_selecionados = ttk.Treeview(frame_listbox, columns=colunas_selecionados, show="headings", height=15)
 for col in colunas_selecionados:

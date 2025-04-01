@@ -57,7 +57,7 @@ def abrir_janela_valores_padroes(root):
     # Cria a janela de configurações
     janela_padrao = tk.Toplevel(root)
     janela_padrao.title("Critérios para REM")
-    janela_padrao.geometry("400x500")
+    janela_padrao.geometry("300x350")
     janela_padrao.resizable(False, False)
     janela_padrao.transient(root)
     janela_padrao.grab_set()
@@ -67,20 +67,20 @@ def abrir_janela_valores_padroes(root):
     frame_inputs.pack(pady=10, fill='both', expand=True)
 
     # Input para DAP <
-    tk.Label(frame_inputs, text="DAP < :", font=("Arial", 12)).pack(pady=5)
-    input_valor1 = tk.Entry(frame_inputs, font=("Arial", 12))
+    tk.Label(frame_inputs, text="DAP < :", font=("Arial", 11)).pack(pady=5)
+    input_valor1 = tk.Entry(frame_inputs, font=("Arial", 11))
     input_valor1.insert(0, valor1)
     input_valor1.pack(pady=5)
 
     # Input para DAP >=
-    tk.Label(frame_inputs, text="DAP >= :", font=("Arial", 12)).pack(pady=5)
-    input_valor2 = tk.Entry(frame_inputs, font=("Arial", 12))
+    tk.Label(frame_inputs, text="DAP >= :", font=("Arial", 11)).pack(pady=5)
+    input_valor2 = tk.Entry(frame_inputs, font=("Arial", 11))
     input_valor2.insert(0, valor2)
     input_valor2.pack(pady=5)
 
     # Input para QF
-    tk.Label(frame_inputs, text="QF :", font=("Arial", 12)).pack(pady=5)
-    input_valor3 = tk.Entry(frame_inputs, font=("Arial", 12))
+    tk.Label(frame_inputs, text="QF :", font=("Arial", 11)).pack(pady=5)
+    input_valor3 = tk.Entry(frame_inputs, font=("Arial", 11))
     input_valor3.insert(0, valor3)
     input_valor3.pack(pady=5)
 
@@ -98,13 +98,13 @@ def abrir_janela_valores_padroes(root):
         frame_alt_container,
         text="ALT > :",
         variable=toggle_alt,
-        font=("Arial", 12)
+        font=("Arial", 11)
     )
     checkbutton_alt.pack(pady=5)
 
     # Frame para o campo ALT
     frame_alt = tk.Frame(frame_alt_container)
-    input_valor4 = tk.Entry(frame_alt, font=("Arial", 12))
+    input_valor4 = tk.Entry(frame_alt, font=("Arial", 11))
     input_valor4.insert(0, valor4)
     input_valor4.pack(pady=5)
 
@@ -129,10 +129,9 @@ def abrir_janela_valores_padroes(root):
     tk.Button(
         frame_confirm,
         text="Confirmar",
-        font=("Arial", 12),
-        bg="lightblue",
+        font=("Arial", 11),
         command=confirmar_valores,
-        width=12,
+        width=10,
         height=2,
     ).pack()
 
