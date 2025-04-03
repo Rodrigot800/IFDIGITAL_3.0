@@ -162,7 +162,7 @@ def adicionar_selecao(event):
     config.read("config.ini")  # Garante que estamos lendo a versão mais recente do arquivo
 
     dap_max = config.getfloat("DEFAULT", "dapmax", fallback=0.5)
-    dap_min = config.getfloat("DEFAULT", "dapmin", fallback=5)
+    dap_min = config.getfloat("DEFAULT", "dapmin", fallback=2)
     qf = config.getint("DEFAULT", "qf", fallback=3)
     alt = config.getfloat("DEFAULT", "alt", fallback=0)
 
@@ -767,30 +767,49 @@ def processar_planilhas():
         inicioTimeSalvar = time.time()
         #organizando as colunas
         df_saida = df_saida[COLUNAS_SAIDA]
-        df_saida = ajustarVolumeHect()
-        print("dentro de processo")
-        print(df_saida)
-        # Exporta para Excel usando o df_modificado com os cálculos originais
-        df_export = df_saida[["UT", "Faixa", "Placa", "Nome Vulgar", "CAP", "CAP_C", "CAP_m", "ALT", "ALT_C", "ALT_m", "QF",
-                                "X", "Y", "DAP", "DAP_C", "Volume_m3", "Volume_m3_C","Latitude", "Longitude", "DM",  "Observacoes",
-                                "Categoria", "Situacao"]]
-        diretorio = os.path.dirname(entrada1_var.get())
-        arquivo_saida = os.path.join(diretorio, "Planilha Processada - IFDIGITAL 3.0.xlsx")
-        df_export.to_excel(arquivo_saida, index=False, engine="xlsxwriter")
-        #salvar o arquivo no diretório
-        # diretorio = os.path.dirname(entrada1_var.get())
-        # arquivo_saida = os.path.join(diretorio, "Planilha Processada - IFDIGITAL 3.0.xlsx")
-        # df_saida.to_excel(arquivo_saida,index=False,engine="xlsxwriter")
 
-        finalTimeSalvar = time.time()
+        if contagem_categorias.get("CORTE", 0) > 0:
+            print(f"CORTE: {contagem_categorias['CORTE']}")
+            print(f"SUBSTITUTA: {contagem_categorias.get('SUBSTITUTA', 0)}")
+            print(f"REMANESCENTE: {contagem_categorias.get('REMANESCENTE', 0)}")
 
-        # finalizando barra de progresso
-        # Para e esconde a barra de progresso e exibe novamente o botão
-        progress_bar.stop()
-        progress_bar.pack_forget()
-        button_process.pack(pady=10)
-        
-        tk.messagebox.showinfo("SUCESSO",f" Processamento realizado em {finalProcesso - inicioProcesso:.2f} segundos e o  arquivo salvo em {finalTimeSalvar - inicioTimeSalvar:.2f} s ")
+            df_saida = ajustarVolumeHect()
+            
+            print("dentro de processo")
+            print(df_saida)
+            # Exporta para Excel usando o df_modificado com os cálculos originais
+            df_export = df_saida[["UT", "Faixa", "Placa", "Nome Vulgar", "CAP", "CAP_C", "CAP_m", "ALT", "ALT_C", "ALT_m", "QF",
+                                    "X", "Y", "DAP", "DAP_C", "Volume_m3", "Volume_m3_C","Latitude", "Longitude", "DM",  "Observacoes",
+                                    "Categoria", "Situacao"]]
+            diretorio = os.path.dirname(entrada1_var.get())
+            arquivo_saida = os.path.join(diretorio, "Planilha Processada - IFDIGITAL 3.0.xlsx")
+            df_export.to_excel(arquivo_saida, index=False, engine="xlsxwriter")
+            #salvar o arquivo no diretório
+            # diretorio = os.path.dirname(entrada1_var.get())
+            # arquivo_saida = os.path.join(diretorio, "Planilha Processada - IFDIGITAL 3.0.xlsx")
+            # df_saida.to_excel(arquivo_saida,index=False,engine="xlsxwriter")
+
+            finalTimeSalvar = time.time()
+
+            # finalizando barra de progresso
+            # Para e esconde a barra de progresso e exibe novamente o botão
+            progress_bar.stop()
+            progress_bar.pack_forget()
+            button_process.pack(pady=10)
+            
+            tk.messagebox.showinfo(
+            "SUCESSO ! ",
+            f"Arquivo salvo em {diretorio} \nProcessamento realizado em {finalProcesso - inicioProcesso:.2f} segundos e o arquivo salvo em {finalTimeSalvar - inicioTimeSalvar:.2f} s ."
+            )
+        else:
+            progress_bar.stop()
+            progress_bar.pack_forget()
+            button_process.pack(pady=10)
+
+            tk.messagebox.showinfo(
+            "ERRO !",
+            "Nem uma Espécie foi categorizada como corte"
+            )
 
     except Exception as e:
         # finalizando barra de progresso
