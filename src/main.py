@@ -7,9 +7,12 @@ import time
 from pacotes.edicaoValorFiltro import  abrir_janela_valores_padroes,valor1,valor2,valor3,valor4
 from pacotes.ordemSubstituta import OrdenadorFrame 
 import os
+import sys
 import configparser
 import numpy as np
 from PIL import Image, ImageTk
+from tkinter import PhotoImage
+
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -978,11 +981,32 @@ def editar_celula_volume(event):
     entry.bind("<Return>", salvar_novo_valor)
     entry.bind("<FocusOut>", salvar_novo_valor)
 
+def definir_icone(app):
+    try:
+        # Verifica se o script está sendo executado como executável (PyInstaller)
+        if getattr(sys, 'frozen', False):
+            # Quando o aplicativo é compilado, os arquivos são extraídos para o diretório _MEIPASS
+            base_path = sys._MEIPASS
+        else:
+            # Durante o desenvolvimento, usa o diretório do script
+            base_path = os.path.dirname(os.path.abspath(__file__))
+        
+        # Caminho do ícone relativo ao diretório correto
+        icone_path = os.path.join(base_path, "", "icone ifdigital.ico")
+        
+        # Define o ícone para a janela
+        app.iconbitmap(icone_path)
+        print(f"Ícone carregado com sucesso a partir de: {icone_path}")
 
+    except Exception as e:
+        print(f"Erro ao carregar o ícone: {e}")
 
-# Criar janela principal
+# Criação da janela principal
 app = tk.Tk()
 app.title("IFDIGITAL 3.0")
+
+# Chama a função para definir o ícone
+definir_icone(app)
 
 # Dimensões da janela
 largura_janela = 1600
