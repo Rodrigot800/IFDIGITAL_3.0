@@ -172,9 +172,16 @@ def adicionar_selecao(event):
     # Se alt for 0, substituir por string vazia
     alt = "" if alt == 0 else alt
 
+    # Alternando as cores das linhas
+    tag = 'verde_claro' if  len(table_selecionados.get_children()) % 2 == 0 else 'branca'
+    
     # Adiciona à tabela com os valores atualizados do config.ini
     valores_atualizados = (nome, dap_max, dap_min, qf, alt, cap)
-    table_selecionados.insert("", "end", values=valores_atualizados)
+    table_selecionados.insert("", "end", values=valores_atualizados, tags=(tag,))
+
+    # Exemplo de como você pode adicionar as tags de cores à tabela
+    table_selecionados.tag_configure('branca', background='white')
+    table_selecionados.tag_configure('verde_claro', background='#d3f8e2')
 
 def editar_linha(event):
     selected_item = table_selecionados.focus()
