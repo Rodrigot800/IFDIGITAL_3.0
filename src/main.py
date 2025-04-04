@@ -9,6 +9,7 @@ from pacotes.ordemSubstituta import OrdenadorFrame
 import os
 import configparser
 import numpy as np
+from PIL import Image, ImageTk
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -104,7 +105,7 @@ def carregar_planilha_principal(arquivo1):
     global planilha_principal, nomes_vulgares
     try:
         status_label.config(text="Carregando inventário principal...")
-        status_label.pack(pady=10)
+        status_label.place(x= 700,y=150)
 
         planilha_principal = pd.read_excel(arquivo1, engine="openpyxl")
         colunas_existentes = [col for col in planilha_principal.columns if col in ["Nome Vulgar"]]
@@ -113,12 +114,13 @@ def carregar_planilha_principal(arquivo1):
         nomes_vulgares = sorted(planilha_principal["Nome Vulgar"].dropna().unique()) 
         atualizar_listbox_nomes("")  # Inicializa a Listbox com todos os nomes
 
-        frame_listbox_e_tabela.pack(pady=10)
-        frame_secundario.pack(pady=10)
+        frame_listbox_e_tabela.place(relx=0.05, rely=0.2)
+        frame_secundario.place(relx=0.425, rely=0.90)
+
     except Exception as e:
         tk.messagebox.showerror("Erro", f"Erro ao carregar a planilha principal: {e}")
     finally:
-        status_label.pack_forget()
+        status_label.place_forget()
 
 def carregar_planilha_secundaria(arquivo2):
     """Carrega a planilha secundária em segundo plano."""
@@ -162,12 +164,16 @@ def adicionar_selecao(event):
     config.read("config.ini")  # Garante que estamos lendo a versão mais recente do arquivo
 
     dap_max = config.getfloat("DEFAULT", "dapmax", fallback=0.5)
-    dap_min = config.getfloat("DEFAULT", "dapmin", fallback=2)
+    dap_min = config.getfloat("DEFAULT", "dapmin", fallback=5)
     qf = config.getint("DEFAULT", "qf", fallback=3)
     alt = config.getfloat("DEFAULT", "alt", fallback=0)
+    cap = config.getfloat("DEFAULT", "cap", fallback=2.5)
+
+    # Se alt for 0, substituir por string vazia
+    alt = "" if alt == 0 else alt
 
     # Adiciona à tabela com os valores atualizados do config.ini
-    valores_atualizados = (nome, dap_max, dap_min, qf, alt)
+    valores_atualizados = (nome, dap_max, dap_min, qf, alt, cap)
     table_selecionados.insert("", "end", values=valores_atualizados)
 
 def editar_linha(event):
@@ -429,7 +435,7 @@ def processar_planilhas():
     
      # Oculta o botão e exibe/inicia a barra de progresso
     button_process.pack_forget()
-    progress_bar.pack(pady=10)
+    progress_bar.pack(pady=0)
     progress_bar.start(10)
     app.update_idletasks()  # Garante que a interface seja atualizada
 
@@ -795,7 +801,7 @@ def processar_planilhas():
             # Para e esconde a barra de progresso e exibe novamente o botão
             progress_bar.stop()
             progress_bar.pack_forget()
-            button_process.pack(pady=10)
+            button_process.pack(pady=0)
             
             tk.messagebox.showinfo(
             "SUCESSO ! ",
@@ -804,7 +810,7 @@ def processar_planilhas():
         else:
             progress_bar.stop()
             progress_bar.pack_forget()
-            button_process.pack(pady=10)
+            button_process.pack(pady=0)
 
             tk.messagebox.showinfo(
             "ERRO !",
@@ -816,7 +822,7 @@ def processar_planilhas():
         # Para e esconde a barra de progresso e exibe novamente o botão
         progress_bar.stop()
         progress_bar.pack_forget()
-        button_process.pack(pady=10)
+        button_process.pack(pady=0)
         tk.messagebox.showerror("Erro", f"Erro ao processar as planilhas: {e}")
 
 def iniciar_processamento():
@@ -956,16 +962,11 @@ def editar_celula_volume(event):
 
 
 
-# Interface gráfica
+# Criar janela principal
 app = tk.Tk()
-
 app.title("IFDIGITAL 3.0")
-app.geometry("1200x1200")
 
-# Definindo o estilo global para todos os widgets ttk
-style = ttk.Style()
-style.configure('.', font=("Arial", 10))  # Aplica a fonte Arial, tamanho 11 para todos os widgets ttk
-
+# Dimensões da janela
 largura_janela = 1600
 altura_janela = 900
 
@@ -980,13 +981,35 @@ pos_y = (altura_tela - altura_janela) // 2
 # Definir a geometria da janela com posição centralizada
 app.geometry(f"{largura_janela}x{altura_janela}+{pos_x}+{pos_y}")
 
+# Impedir a maximização da janela
+app.resizable(False, False)  # Permite redimensionamento
+app.maxsize(largura_janela, altura_janela)  # Impede que a janela seja maximizada
+
+# Carregar imagem de fundo corretamente
+caminho_imagem = os.path.join("src", "01florest.png")  # Ajuste conforme necessário
+
+if not os.path.exists(caminho_imagem):
+    print(f"Erro: Arquivo {caminho_imagem} não encontrado!")
+
+# Variável global para manter a imagem na memória
+global fundo_tk  
+imagem_fundo = Image.open(caminho_imagem)
+imagem_fundo = imagem_fundo.resize((largura_janela, altura_janela), Image.Resampling.LANCZOS)
+fundo_tk = ImageTk.PhotoImage(imagem_fundo)
+
+# Criar um canvas e definir a imagem de fundo
+canvas = tk.Canvas(app, width=largura_janela, height=altura_janela)
+canvas.pack(fill="both", expand=True)  # Faz o canvas ocupar toda a janela
+canvas.create_image(0, 0, image=fundo_tk, anchor="nw")  # Define a imagem de fundo
+
+# Variáveis globais
 entrada1_var = tk.StringVar()
 entrada2_var = tk.StringVar()
 pesquisa_var = tk.StringVar()
 
 # Frame para entrada de arquivos
 frame_inputs = ttk.LabelFrame(app, text="Entrada de Arquivos", padding=(10, 10))
-frame_inputs.pack(fill="x", pady=10, padx=10)
+frame_inputs.place(x=10, y=10)  # Posiciona o frame sobre o canvas
 
 ttk.Label(frame_inputs, text="INVENTÁRIO :").grid(row=0, column=0, sticky="w")
 ttk.Entry(frame_inputs, textvariable=entrada1_var, width=60).grid(row=0, column=1, pady=5, padx=5)
@@ -995,12 +1018,11 @@ ttk.Button(frame_inputs, text="Selecionar", command=lambda: selecionar_arquivos(
 ttk.Label(frame_inputs, text="LISTA DE ESPECIES :").grid(row=1, column=0, sticky="w")
 ttk.Entry(frame_inputs, textvariable=entrada2_var, width=60).grid(row=1, column=1, pady=5, padx=5)
 ttk.Button(frame_inputs, text="Selecionar", command=lambda: selecionar_arquivos("secundaria")).grid(row=1, column=2, padx=5)
-#ttk.Button(frame_inputs, text="Novo Botão", command=lambda:abrir_janela_valores_padroes(root) ).grid(row=2, column=1, pady=10, padx=5)  # Botão abaixo dos inputs
 
 frame_lado_a_lado = tk.Frame(app)
-frame_lado_a_lado.pack(pady=10)
+frame_lado_a_lado.place(x= 30, y=125)
 
-botao_modificar_filtro = tk.Button(frame_lado_a_lado, text="Modificar Filtragem para REM", 
+botao_modificar_filtro = ttk.Button(frame_lado_a_lado, text="Modificar Filtragem para REM", 
                                     command=abrir_janela_valores_padroes_callback)
 botao_modificar_filtro.pack(side=tk.LEFT, padx=50)
 
@@ -1069,7 +1091,7 @@ table_selecionados.bind("<Double-1>", editar_linha)
 
 # Criar um frame para os botões
 frame_botoes = tk.Frame(frame_listbox)
-frame_botoes.grid(row=6, column=0, columnspan=3, pady=10)  # Ocupa 3 colunas
+frame_botoes.grid(row=6, column=0, columnspan=3, pady=0)  # Ocupa 3 colunas
 
 # Criar os botões dentro do frame_botoes
 btn_todos = ttk.Button(frame_botoes, text="Selecionar Todos", command=selecionar_todos)
@@ -1085,7 +1107,7 @@ btn_limpar.pack(side="left", padx=10)
 
 # Segunda tabela com "UT" e "Vol/Hect Total"
 frame_tabela2 = ttk.Frame(frame_listbox_e_tabela)
-frame_tabela2.pack(side="right", padx=10, pady=10, fill="y")
+frame_tabela2.pack(side="right", padx=0, pady=0, fill="y")
 
 # Definição das colunas
 colunas_tabela2 = ("UT", "Hectares", "n° Árv", "Vol(m³)", "Vol_Max", "Diminuir", "Aumentar", "V_m³/ha",
@@ -1104,15 +1126,17 @@ table_ut_vol.config(height=20)
 table_ut_vol.bind("<Double-1>", editar_celula_volume)
 
 # Frame para o botão de processamento
-frame_secundario = ttk.Frame(app, padding=(10, 10))
+
+frame_secundario = ttk.Frame(app)
+frame_secundario.place(x= 30, y=125)
 button_process = ttk.Button(frame_secundario, text="Processar Planilhas", command=iniciar_processamento, width=40)
-button_process.pack(pady=10)
+button_process.pack(padx=(0,0), pady=(0,0))
 
 # Barra de progresso (inicialmente não exibida)
 progress_bar = ttk.Progressbar(frame_secundario, mode='indeterminate', length=300)
-frame_listbox_e_tabela.pack_forget()
-frame_secundario.pack_forget()  # Inicialmente escondido
 
+frame_listbox_e_tabela.place_forget()
+frame_secundario.place_forget()  # Inicialmente escondido
 
 carregar_planilha_salva("principal")
 carregar_planilha_salva("secundaria")
