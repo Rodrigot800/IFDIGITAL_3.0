@@ -404,12 +404,17 @@ def ajustarVolumeHect():
 
     df_tabelaDeAjusteVol["num_arvores"] = df_tabelaDeAjusteVol["num_arvores"].astype(int)
 
+   # Definir as tags para alternar entre as cores
+    table_ut_vol.tag_configure('branca', background='white')  # Cor para as linhas brancas
+    table_ut_vol.tag_configure('verde_claro', background='#d3f8e2')  # Cor para as linhas verde claro
+
     # Limpa a Treeview table_ut_vol para evitar duplicação
     for child in table_ut_vol.get_children():
         table_ut_vol.delete(child)
 
-    # Insere os valores na Treeview table_ut_vol
-    for _, row in df_tabelaDeAjusteVol.iterrows():
+    # Insere os valores na Treeview table_ut_vol com alternância de cores
+    for i, (_, row) in enumerate(df_tabelaDeAjusteVol.iterrows()):
+        # Formatando os valores para exibição
         ut_val = f"{row['ut']:.0f}"
         hectares_val = f"{row['hac']:.5f}"
         num_arvores = f"{row['num_arvores']:.0f}"
@@ -421,13 +426,19 @@ def ajustarVolumeHect():
         dif_pct_val = f"{row['dif_pct']:.2f}"  # Exibe a diferença percentual
         CAP_val = f"{row['CAP_m']:.3f}"
         ALT_val = f"{row['ALT_m']:.2f}"
+
+        # Alterna as cores das linhas (índices pares e ímpares)
+        tag = 'verde_claro' if i % 2 == 0 else 'branca'
+        
+        # Insere os dados na Treeview com a tag de cor
         table_ut_vol.insert("", "end", values=(ut_val, hectares_val, num_arvores,
                                                 volume_total, volume_max, diminuir_val,
                                                 aumentar_val, volume_por_hect,
-                                                dif_pct_val, CAP_val, ALT_val))
+                                                dif_pct_val, CAP_val, ALT_val), tags=(tag,))
 
     print("UT, Hectares, Número de Árvores e Volume Total Atualizados:")
 
+    # Retorna o DataFrame modificado
     return df_modificado
 
 
@@ -1117,10 +1128,10 @@ table_ut_vol = ttk.Treeview(frame_tabela2, columns=colunas_tabela2, show="headin
 # Configuração das colunas
 for col in colunas_tabela2:
     table_ut_vol.heading(col, text=col)
-    table_ut_vol.column(col, width=70, anchor="center")
+    table_ut_vol.column(col, width=75, anchor="center")
 
-table_ut_vol.pack(pady=10)
-table_ut_vol.config(height=20)
+table_ut_vol.pack(pady=0)
+table_ut_vol.config(height=22)
 
 # Adiciona evento de duplo clique para editar
 table_ut_vol.bind("<Double-1>", editar_celula_volume)
