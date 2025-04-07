@@ -283,27 +283,6 @@ def ajustarVolumeHect():
     df_modificado["ut"] = df_modificado["UT"]
     df_modificado["hac"] = df_modificado["UT_AREA_HA"]
 
-    # # Calculando a coluna 'ALT_C'
-    # df_modificado["ALT_C"] = df_modificado["ALT"] + df_modificado["ALT_m"]
-
-    # # Aplicando as condições
-    # # df_modificado["ALT_C"] = df_modificado.apply(
-    # #     lambda row: 10 if row["ALT"] > 10 and row["ALT_C"] <= 10 else 
-    # #                 row["ALT_C"] if row["ALT"] > 10 else 
-    # #                 row["ALT"] if row["ALT_C"] < row["ALT"] else row["ALT_C"],
-    # #     axis=1
-    # # )
-    # # Calculando a coluna 'CAP_C'
-    # df_modificado["CAP_C"] = df_modificado["CAP"] * df_modificado["CAP_m"]
-
-    # # df_modificado["CAP_C"] = df_modificado.apply(
-    # # lambda row: 158 if row["CAP"] > 158 and row["CAP_C"] <= 158 else  
-    # #             row["CAP_C"] if row["CAP"] > 158 else  
-    # #             row["CAP"] if row["CAP_C"] < row["CAP"] else 
-    # #             min(row["CAP_C"], 628) if row["CAP_C"] >= 680 else row["CAP_C"],
-    # #     axis=1
-    # # )
-
     # Calculando a coluna 'ALT_C' dependendo da condição de 'Categoria'
     df_modificado["ALT_C"] = df_modificado.apply(
         lambda row: row["ALT"] + row["ALT_m"] if row["Categoria"] == "CORTE" else row["ALT"],
@@ -868,46 +847,71 @@ def abrir_janela_valores_padroes_callback():
 colunas_editaveis = [ "CAP", "ALT"]
 
 def editar_celula_volume(event):
-    
+
     def editarEspeciesUT(event):
-        # Obtém o item selecionado (número da UT) da tabela onde o clique ocorreu
         item = table_ut_vol.selection()[0]
-        # Obtém o valor da UT da tabela (supondo que a coluna 1 é a UT)
-        ut = table_ut_vol.item(item, "values")[0]  # Primeiro valor da linha selecionada
-        
-        # Criar a nova janela (Toplevel)
+        ut = table_ut_vol.item(item, "values")[0]
+
+        # Garante que a coluna F_REM existe
+        if "F_REM" not in df_saida.columns:
+            df_saida["F_REM"] = ""
+
+        df_filtrado = df_saida[
+            (df_saida["UT"] == int(ut)) &
+            (df_saida["Categoria"].str.upper().str.strip() == "CORTE")
+        ]
+
+        agrupado = df_filtrado.groupby("Nome Vulgar").agg(
+            num_arvores=('Nome Vulgar', 'count'),
+            volume_total=('Volume_m3_C', 'sum'),
+        ).reset_index()
+
         nova_janela = tk.Toplevel()
-        nova_janela.title(f"Espécies da UT {ut}")  # Título da janela
-        nova_janela.geometry("800x500")  # Tamanho da janela
-        
-        # Adiciona uma tabela Treeview
-        colunas = ("Nome", "n° Árvores", "Volume Total", "DAP <", "DAP >=", "QF =", "ALT >", "F_REM")
+        nova_janela.title(f"Espécies da UT {ut}")
+        nova_janela.geometry("900x500")
+
+        colunas = ("Nome", "n° Árvores", "Volume Total", "F_REM")
         tabela = ttk.Treeview(nova_janela, columns=colunas, show="headings")
-        
-        # Definindo os cabeçalhos das colunas
+
         for col in colunas:
             tabela.heading(col, text=col)
-            tabela.column(col, width=100, anchor="center")
-        
-        # Inserindo alguns dados fictícios na tabela (pode ser substituído por dados reais)
-        dados = [
-            ("João", 50, 300, 10, 20, 3, 15, "SIM"),
-            ("Maria", 60, 350, 15, 25, 5, 20, "NÃO"),
-            ("Pedro", 45, 280, 12, 18, 4, 17, "SIM"),
-        ]
-        
-        for item in dados:
-            tabela.insert("", "end", values=item)
-        
+            tabela.column(col, width=150, anchor="center")
+
+        combobox_refs = {}
+
+        for i, row in agrupado.iterrows():
+            nome = row["Nome Vulgar"]
+            num = row["num_arvores"]
+            vol = f"{row['volume_total']:.2f}"
+            tabela.insert("", "end", iid=str(i), values=(nome, num, vol, ""))
+
         tabela.pack(pady=10, fill="both", expand=True)
-        
-        # Função que será chamada quando o botão "Salvar" for pressionado
+
+        # Cria comboboxes editáveis em cada linha para a coluna F_REM
+        for i, row in agrupado.iterrows():
+            bbox = tabela.bbox(str(i), 3)
+            if bbox:
+                x, y, w, h = bbox
+                combo = ttk.Combobox(nova_janela, values=["SIM", "NÃO"], width=10)
+                combo.place(x=x + 10, y=y + 80, width=w)
+                combo.set("")  # valor inicial
+                combobox_refs[row["Nome Vulgar"]] = combo
+
         def salvar_dados():
-            print(f"Dados salvos para UT {ut}!")  # Aqui você pode implementar a lógica de salvar dados
-        
-        # Botão para salvar os dados
+            for nome, combo in combobox_refs.items():
+                valor_f_rem = combo.get()
+                # Atualiza a coluna F_REM no df_saida para todas as linhas da UT e Nome Vulgar
+                cond = (df_saida["UT"] == int(ut)) & (df_saida["Nome Vulgar"] == nome)
+                df_saida.loc[cond, "F_REM"] = valor_f_rem
+            print(f"Dados F_REM atualizados para UT {ut}.")
+
         botao_salvar = ttk.Button(nova_janela, text="Salvar", command=salvar_dados)
         botao_salvar.pack(pady=10)
+
+
+
+
+
     def ajustarCAP_ALT(item, event):
         # Agora que temos o item e o evento, podemos usar o evento para identificar a coluna
         coluna_selecionada = table_ut_vol.identify_column(event.x)
