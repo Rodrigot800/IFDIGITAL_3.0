@@ -870,7 +870,44 @@ colunas_editaveis = [ "CAP", "ALT"]
 def editar_celula_volume(event):
     
     def editarEspeciesUT(event):
-        print(event)
+        # Obtém o item selecionado (número da UT) da tabela onde o clique ocorreu
+        item = table_ut_vol.selection()[0]
+        # Obtém o valor da UT da tabela (supondo que a coluna 1 é a UT)
+        ut = table_ut_vol.item(item, "values")[0]  # Primeiro valor da linha selecionada
+        
+        # Criar a nova janela (Toplevel)
+        nova_janela = tk.Toplevel()
+        nova_janela.title(f"Espécies da UT {ut}")  # Título da janela
+        nova_janela.geometry("800x500")  # Tamanho da janela
+        
+        # Adiciona uma tabela Treeview
+        colunas = ("Nome", "n° Árvores", "Volume Total", "DAP <", "DAP >=", "QF =", "ALT >", "F_REM")
+        tabela = ttk.Treeview(nova_janela, columns=colunas, show="headings")
+        
+        # Definindo os cabeçalhos das colunas
+        for col in colunas:
+            tabela.heading(col, text=col)
+            tabela.column(col, width=100, anchor="center")
+        
+        # Inserindo alguns dados fictícios na tabela (pode ser substituído por dados reais)
+        dados = [
+            ("João", 50, 300, 10, 20, 3, 15, "SIM"),
+            ("Maria", 60, 350, 15, 25, 5, 20, "NÃO"),
+            ("Pedro", 45, 280, 12, 18, 4, 17, "SIM"),
+        ]
+        
+        for item in dados:
+            tabela.insert("", "end", values=item)
+        
+        tabela.pack(pady=10, fill="both", expand=True)
+        
+        # Função que será chamada quando o botão "Salvar" for pressionado
+        def salvar_dados():
+            print(f"Dados salvos para UT {ut}!")  # Aqui você pode implementar a lógica de salvar dados
+        
+        # Botão para salvar os dados
+        botao_salvar = ttk.Button(nova_janela, text="Salvar", command=salvar_dados)
+        botao_salvar.pack(pady=10)
     def ajustarCAP_ALT(item, event):
         # Agora que temos o item e o evento, podemos usar o evento para identificar a coluna
         coluna_selecionada = table_ut_vol.identify_column(event.x)
