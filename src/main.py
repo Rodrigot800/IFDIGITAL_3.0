@@ -868,118 +868,148 @@ def abrir_janela_valores_padroes_callback():
 colunas_editaveis = [ "CAP", "ALT"]
 
 def editar_celula_volume(event):
-    """
-    Permite editar as colunas CAP e ALT ao dar duplo clique em uma célula da Treeview (table_ut_vol).
-    Apenas colunas especificadas em 'colunas_editaveis' podem ser editadas.
-    """
-    global df_tabelaDeAjusteVol, df_valores_atualizados
-
-    # Captura o item (linha) selecionado
-    item_selecionado = table_ut_vol.focus()
-    if not item_selecionado:
-        return
-
-    # Identifica a coluna clicada a partir da coordenada x do evento
-    coluna_selecionada = table_ut_vol.identify_column(event.x)
-    try:
-        # Converte, por exemplo, "#2" para índice 1 (0-indexado)
-        col_index = int(coluna_selecionada.lstrip("#")) - 1
-    except Exception as e:
-        print("Erro ao identificar a coluna:", e)
-        return
-
-    # Obtém o nome da coluna correspondente
-    col_nome = table_ut_vol["columns"][col_index]
-    # Verifica se a coluna é editável (lista global definida, por exemplo: colunas_editaveis = ["CAP", "ALT"])
-    if col_nome not in colunas_editaveis:
-        return
-
-    # Obtém as coordenadas da célula para posicionar o widget de edição (Entry)
-    bbox = table_ut_vol.bbox(item_selecionado, col_index)
-    if not bbox:
-        return
-    x, y, largura, altura = bbox
-
-    # Obtém o valor atual da célula
-    valores = list(table_ut_vol.item(item_selecionado, "values"))
-    valor_atual = valores[col_index]
-
-    # Cria o widget Entry para edição, posicionando-o na célula
-    entry = tk.Entry(table_ut_vol)
-    entry.place(x=x, y=y, width=largura, height=altura)
-    entry.insert(0, valor_atual)
-    entry.focus()
-
-    def salvar_novo_valor(event=None):
+    
+    def editarEspeciesUT(event):
+        print(event)
+    def ajustarCAP_ALT(item, event):
+        # Agora que temos o item e o evento, podemos usar o evento para identificar a coluna
+        coluna_selecionada = table_ut_vol.identify_column(event.x)
+        print(f"Coluna clicada: {coluna_selecionada}")
+        # Lógica de ajuste de CAP/ALT
+        print(f"Item selecionado: {item}")
+        # Aqui você pode adicionar o que precisa fazer com o item selecionado
         """
-        Função interna para salvar o novo valor digitado.
-        Atualiza a Treeview e os DataFrames df_tabelaDeAjusteVol e df_valores_atualizados.
+        Permite editar as colunas CAP e ALT ao dar duplo clique em uma célula da Treeview (table_ut_vol).
+        Apenas colunas especificadas em 'colunas_editaveis' podem ser editadas.
         """
         global df_tabelaDeAjusteVol, df_valores_atualizados
 
-        novo_valor_str = entry.get()
+        # Captura o item (linha) selecionado
+        item_selecionado = table_ut_vol.focus()
+        if not item_selecionado:
+            return
+
+        # Identifica a coluna clicada a partir da coordenada x do evento
+        coluna_selecionada = table_ut_vol.identify_column(event.x)
         try:
-            novo_valor = float(novo_valor_str)
-        except ValueError:
-            entry.destroy()
+            # Converte, por exemplo, "#2" para índice 1 (0-indexado)
+            col_index = int(coluna_selecionada.lstrip("#")) - 1
+        except Exception as e:
+            print("Erro ao identificar a coluna:", e)
             return
 
-        # Atualiza a lista de valores da linha na Treeview
-        valores[col_index] = novo_valor
-        table_ut_vol.item(item_selecionado, values=valores)
-
-        # Obtém o valor da primeira coluna (UT) e converte para float
-        try:
-            ut_val = float(valores[0])
-        except ValueError:
-            print("Erro ao converter UT para float.")
-            entry.destroy()
+        # Obtém o nome da coluna correspondente
+        col_nome = table_ut_vol["columns"][col_index]
+        # Verifica se a coluna é editável (lista global definida, por exemplo: colunas_editaveis = ["CAP", "ALT"])
+        if col_nome not in colunas_editaveis:
             return
 
-        # Verifica se "ut" existe em df_tabelaDeAjusteVol
-        if "ut" not in df_tabelaDeAjusteVol.columns:
-            print("Erro: A coluna 'ut' não existe no DataFrame!")
-            entry.destroy()
+        # Obtém as coordenadas da célula para posicionar o widget de edição (Entry)
+        bbox = table_ut_vol.bbox(item_selecionado, col_index)
+        if not bbox:
             return
+        x, y, largura, altura = bbox
 
-        # Localiza a linha no DataFrame correspondente à UT
-        index_df_series = df_tabelaDeAjusteVol[df_tabelaDeAjusteVol["ut"] == ut_val].index
-        if index_df_series.empty:
-            print(f"Erro: UT {ut_val} não encontrado no DataFrame!")
+        # Obtém o valor atual da célula
+        valores = list(table_ut_vol.item(item_selecionado, "values"))
+        valor_atual = valores[col_index]
+
+        # Cria o widget Entry para edição, posicionando-o na célula
+        entry = tk.Entry(table_ut_vol)
+        entry.place(x=x, y=y, width=largura, height=altura)
+        entry.insert(0, valor_atual)
+        entry.focus()
+
+        def salvar_novo_valor(event=None):
+            """
+            Função interna para salvar o novo valor digitado.
+            Atualiza a Treeview e os DataFrames df_tabelaDeAjusteVol e df_valores_atualizados.
+            """
+            global df_tabelaDeAjusteVol, df_valores_atualizados
+
+            novo_valor_str = entry.get()
+            try:
+                novo_valor = float(novo_valor_str)
+            except ValueError:
+                entry.destroy()
+                return
+
+            # Atualiza a lista de valores da linha na Treeview
+            valores[col_index] = novo_valor
+            table_ut_vol.item(item_selecionado, values=valores)
+
+            # Obtém o valor da primeira coluna (UT) e converte para float
+            try:
+                ut_val = float(valores[0])
+            except ValueError:
+                print("Erro ao converter UT para float.")
+                entry.destroy()
+                return
+
+            # Verifica se "ut" existe em df_tabelaDeAjusteVol
+            if "ut" not in df_tabelaDeAjusteVol.columns:
+                print("Erro: A coluna 'ut' não existe no DataFrame!")
+                entry.destroy()
+                return
+
+            # Localiza a linha no DataFrame correspondente à UT
+            index_df_series = df_tabelaDeAjusteVol[df_tabelaDeAjusteVol["ut"] == ut_val].index
+            if index_df_series.empty:
+                print(f"Erro: UT {ut_val} não encontrado no DataFrame!")
+                entry.destroy()
+                return
+            index_df = index_df_series[0]
+
+            # Atualiza o valor da coluna editada no DataFrame de ajuste
+            df_tabelaDeAjusteVol.at[index_df, col_nome] = novo_valor
+
+            # Se a coluna editada for CAP ou ALT, atualiza também o DataFrame global de valores atualizados
+            if col_nome in ["CAP", "ALT"]:
+                # Se df_valores_atualizados não existir ou estiver vazio, inicializa-o
+                if 'df_valores_atualizados' not in globals() or df_valores_atualizados.empty:
+                    df_valores_atualizados = pd.DataFrame(columns=["ut", "CAP", "ALT"])
+                # Procura se já existe uma linha para essa UT
+                idx_val_series = df_valores_atualizados[df_valores_atualizados["ut"] == ut_val].index
+                if not idx_val_series.empty:
+                    df_valores_atualizados.at[idx_val_series[0], col_nome] = novo_valor
+                else:
+                    nova_linha = {"ut": ut_val, "CAP": np.nan, "ALT": np.nan}
+                    nova_linha[col_nome] = novo_valor
+                    df_valores_atualizados = pd.concat([df_valores_atualizados, pd.DataFrame([nova_linha])], ignore_index=True)
+
+            print(f"Valor atualizado: UT={ut_val}, {col_nome}={novo_valor}")
+            print("DataFrame de ajuste atualizado:")
+            print(df_tabelaDeAjusteVol)
+            print("DataFrame de valores atualizados:")
+            print(df_valores_atualizados)
+
+            ajustarVolumeHect()
+
             entry.destroy()
-            return
-        index_df = index_df_series[0]
+        
+        # Vincula a função salvar_novo_valor aos eventos Return e FocusOut
+        entry.bind("<Return>", salvar_novo_valor)
+        entry.bind("<FocusOut>", salvar_novo_valor)
 
-        # Atualiza o valor da coluna editada no DataFrame de ajuste
-        df_tabelaDeAjusteVol.at[index_df, col_nome] = novo_valor
-
-        # Se a coluna editada for CAP ou ALT, atualiza também o DataFrame global de valores atualizados
-        if col_nome in ["CAP", "ALT"]:
-            # Se df_valores_atualizados não existir ou estiver vazio, inicializa-o
-            if 'df_valores_atualizados' not in globals() or df_valores_atualizados.empty:
-                df_valores_atualizados = pd.DataFrame(columns=["ut", "CAP", "ALT"])
-            # Procura se já existe uma linha para essa UT
-            idx_val_series = df_valores_atualizados[df_valores_atualizados["ut"] == ut_val].index
-            if not idx_val_series.empty:
-                df_valores_atualizados.at[idx_val_series[0], col_nome] = novo_valor
-            else:
-                nova_linha = {"ut": ut_val, "CAP": np.nan, "ALT": np.nan}
-                nova_linha[col_nome] = novo_valor
-                df_valores_atualizados = pd.concat([df_valores_atualizados, pd.DataFrame([nova_linha])], ignore_index=True)
-
-        print(f"Valor atualizado: UT={ut_val}, {col_nome}={novo_valor}")
-        print("DataFrame de ajuste atualizado:")
-        print(df_tabelaDeAjusteVol)
-        print("DataFrame de valores atualizados:")
-        print(df_valores_atualizados)
-
-        ajustarVolumeHect()
-
-        entry.destroy()
+     # Pega o item selecionado
+    item = table_ut_vol.selection()[0]
     
-    # Vincula a função salvar_novo_valor aos eventos Return e FocusOut
-    entry.bind("<Return>", salvar_novo_valor)
-    entry.bind("<FocusOut>", salvar_novo_valor)
+    # Identifica a coluna clicada (usando o evento)
+    coluna_clicada = table_ut_vol.identify_column(event.x)  # Identifica a coluna pelo eixo X do evento
+    
+    # Verifica a coluna clicada e chama a função correspondente
+    if coluna_clicada == "#1":  # A coluna UT é a primeira (coluna #1)
+        # Se for a coluna "UT", chama a função para editar a célula de UT
+        editarEspeciesUT(item)
+    elif coluna_clicada == "#10":  # A coluna CAP é a coluna #10
+        # Se for a coluna "CAP", chama a função para editar a célula de CAP
+        ajustarCAP_ALT(item,event)
+    elif coluna_clicada == "#11":  # A coluna ALT é a coluna #11
+        # Se for a coluna "ALT", chama a função para editar a célula de ALT
+        ajustarCAP_ALT(item,event)
+    else:
+        print(f"Cliquei na coluna {coluna_clicada}, mas não tem ação associada.")
+
 
 def definir_icone(app):
     try:
@@ -1166,6 +1196,7 @@ table_ut_vol.config(height=22)
 
 # Adiciona evento de duplo clique para editar
 table_ut_vol.bind("<Double-1>", editar_celula_volume)
+
 
 # Frame para o botão de processamento
 
