@@ -433,7 +433,7 @@ def ajustarVolumeHect():
     return df_modificado
 
 
-def processar_planilhas():
+def processar_planilhas(save):
     
      # Oculta o botão e exibe/inicia a barra de progresso
     button_process.pack_forget()
@@ -547,39 +547,54 @@ def processar_planilhas():
 
         # Função para aplicar o filtro
         def filtrar_REM(row, parametros):
-            nome = row["Nome Vulgar"].upper()
+            nome = str(row["Nome Vulgar"]).upper()
+            ut = str(row["UT"])
 
-            # Verificar se a espécie está na tabela de parâmetros
             if nome not in parametros:
-                return row["Categoria"]  # Retorna a categoria atual se a espécie não estiver na tabela
+                return row["Categoria"]
 
-            # Extrair os parâmetros da tabela para a espécie
             especie_parametros = parametros[nome]
             DAPmin = especie_parametros["dap_min"]
             DAPmax = especie_parametros["dap_max"]
             QF = especie_parametros["qf"]
             alt = especie_parametros["alt"]
 
-            # Atualizar a coluna "Categoria" com "REMANESCENTE" se a situação for "protegida"
-            situacao = str(row["Situacao"]).strip().lower() if pd.notna(row["Situacao"]) else ""
+            # Verifica se há edições salvas para a UT e espécie
+            if ut in dados_editados_por_ut and nome in dados_editados_por_ut[ut]:
+                edits = dados_editados_por_ut[ut][nome]
 
-            # Se for protegida, marcar como REMANESCENTE
+                # Se F_REM for "SIM", marca como REMANESCENTE diretamente
+                if edits.get("F_REM", "").strip().upper() == "SIM":
+                    return "REMANESCENTE"
+
+                # Substitui DAPmin e QF se estiverem definidos
+                if "DAP <" in edits:
+                    try:
+                        DAPmin = float(edits["DAP <"])
+                    except ValueError:
+                        pass
+
+                if "QF >=" in edits:
+                    try:
+                        QF = int(edits["QF >="])
+                    except ValueError:
+                        pass
+
+            # Protegidas continuam sendo REMANESCENTE
+            situacao = str(row.get("Situacao", "")).strip().lower()
             if situacao == "protegida":
                 return "REMANESCENTE"
 
-            # Se o DAP for menor que DAPmin ou maior/igual a DAPmax, marcar como REMANESCENTE
+            # Regras padrão
             if isinstance(row["DAP"], (float, int)) and (row["DAP"] < DAPmin or row["DAP"] >= DAPmax):
                 return "REMANESCENTE"
 
-            # Se QF for igual ao valor definido, marcar como REMANESCENTE
-            if isinstance(row["QF"], int) and row["QF"] == QF:
+            if isinstance(row["QF"], int) and row["QF"] >= QF:
                 return "REMANESCENTE"
 
-            # Se alt > 0 e ALT for maior que alt, marcar como REMANESCENTE
             if isinstance(row["ALT"], (float, int)) and alt > 0 and row["ALT"] > alt:
                 return "REMANESCENTE"
 
-            # Se nenhuma condição foi atendida, mantém a categoria original
             return row["Categoria"]
 
         # Recuperar os parâmetros da tabela
@@ -785,19 +800,35 @@ def processar_planilhas():
             
             print("dentro de processo")
             print(df_saida)
-            # Exporta para Excel usando o df_modificado com os cálculos originais
-            df_export = df_saida[["UT", "Faixa", "Placa", "Nome Vulgar", "CAP", "CAP_C", "CAP_m", "ALT", "ALT_C", "ALT_m", "QF",
-                                    "X", "Y", "DAP", "DAP_C", "Volume_m3", "Volume_m3_C","Latitude", "Longitude", "DM",  "Observacoes",
-                                    "Categoria", "Situacao"]]
-            diretorio = os.path.dirname(entrada1_var.get())
-            arquivo_saida = os.path.join(diretorio, "Planilha Processada - IFDIGITAL 3.0.xlsx")
-            df_export.to_excel(arquivo_saida, index=False, engine="xlsxwriter")
+            if save == True :
+                # Exporta para Excel usando o df_modificado com os cálculos originais
+                df_export = df_saida[["UT", "Faixa", "Placa", "Nome Vulgar", "CAP", "CAP_C", "CAP_m", "ALT", "ALT_C", "ALT_m", "QF",
+                                        "X", "Y", "DAP", "DAP_C", "Volume_m3", "Volume_m3_C","Latitude", "Longitude", "DM",  "Observacoes",
+                                        "Categoria", "Situacao"]]
+                diretorio = os.path.dirname(entrada1_var.get())
+                arquivo_saida = os.path.join(diretorio, "Planilha Processada - IFDIGITAL 3.0.xlsx")
+                df_export.to_excel(arquivo_saida, index=False, engine="xlsxwriter")
+                finalTimeSalvar = time.time()
+
+                # finalizando barra de progresso
+                # Para e esconde a barra de progresso e exibe novamente o botão
+                progress_bar.stop()
+                progress_bar.pack_forget()
+                button_process.pack(pady=0)
+                
+                tk.messagebox.showinfo(
+                "SUCESSO ! ",
+                f"Arquivo salvo em {diretorio} \nProcessamento realizado em {finalProcesso - inicioProcesso:.2f} segundos e o arquivo salvo em {finalTimeSalvar - inicioTimeSalvar:.2f} s ."
+                )
+            else :
+                print("fim de processamento")
+
             #salvar o arquivo no diretório
             # diretorio = os.path.dirname(entrada1_var.get())
             # arquivo_saida = os.path.join(diretorio, "Planilha Processada - IFDIGITAL 3.0.xlsx")
             # df_saida.to_excel(arquivo_saida,index=False,engine="xlsxwriter")
 
-            finalTimeSalvar = time.time()
+            
 
             # finalizando barra de progresso
             # Para e esconde a barra de progresso e exibe novamente o botão
@@ -805,10 +836,6 @@ def processar_planilhas():
             progress_bar.pack_forget()
             button_process.pack(pady=0)
             
-            tk.messagebox.showinfo(
-            "SUCESSO ! ",
-            f"Arquivo salvo em {diretorio} \nProcessamento realizado em {finalProcesso - inicioProcesso:.2f} segundos e o arquivo salvo em {finalTimeSalvar - inicioTimeSalvar:.2f} s ."
-            )
         else:
             progress_bar.stop()
             progress_bar.pack_forget()
@@ -827,12 +854,13 @@ def processar_planilhas():
         button_process.pack(pady=0)
         tk.messagebox.showerror("Erro", f"Erro ao processar as planilhas: {e}")
 
-def iniciar_processamento():
+def iniciar_processamento(save_planilha):
     config = configparser.ConfigParser()
     config.read('config.ini')
     """Inicia o processamento em uma thread separada."""
     thread = threading.Thread(
-    target=processar_planilhas
+    target=processar_planilhas,
+    args=(save_planilha,)
     )
     thread.daemon = True  # Fecha a thread quando a interface é fechada
     thread.start()
@@ -857,9 +885,6 @@ def editar_celula_volume(event):
         valores_ut = table_ut_vol.item(item, "values")
         hectares = float(valores_ut[1])
 
-        if "F_REM" not in df_saida.columns:
-            df_saida["F_REM"] = ""
-
         df_filtrado = df_saida[
             (df_saida["UT"] == int(ut)) &
             (df_saida["Categoria"].str.upper().str.strip() == "CORTE")
@@ -868,8 +893,6 @@ def editar_celula_volume(event):
         agrupado = df_filtrado.groupby("Nome Vulgar").agg(
             num_arvores=('Nome Vulgar', 'count'),
             volume_total=('Volume_m3_C', 'sum'),
-            dap_menor=('DAP', lambda x: (x < 30).sum()),
-            qf_maiorouIgual=('QF', lambda x: (x == 1).sum()),
         ).reset_index()
         agrupado["vol_por_ha"] = agrupado["volume_total"] / hectares
 
@@ -959,8 +982,38 @@ def editar_celula_volume(event):
             valores_atualizados = tabela.item(nome, "values")[:4] + tuple(entradas[campo].get() for campo in entradas)
             tabela.item(nome, values=valores_atualizados)
 
-        btn_salvar = ttk.Button(nova_janela, text="Salvar Alterações", command=salvar_dados)
-        btn_salvar.pack(pady=10)
+        def excluir_alteracoes_atuais():
+            if ut in dados_editados_por_ut:
+                print("Antes da exclusão:")
+                print(dados_editados_por_ut)
+
+                del dados_editados_por_ut[ut]
+
+                print("Depois da exclusão:")
+                print(dados_editados_por_ut)
+                nova_janela.destroy()
+                processar_planilhas(False)
+                messagebox.showinfo("Alterações Excluídas", f"Todas as alterações da UT '{ut}' foram removidas.")
+            else:
+                messagebox.showinfo("Nenhuma Alteração", f"Não há alterações registradas para a UT '{ut}'.")
+            
+
+
+        # Frame para os botões lado a lado
+        frame_botoes = ttk.Frame(nova_janela)
+        frame_botoes.pack(pady=10)
+
+        # Botão Salvar
+        btn_salvar = ttk.Button(frame_botoes, text="Salvar Alterações", command=salvar_dados)
+        btn_salvar.grid(row=0, column=0, padx=5)
+
+        # Botão Aplicar
+        btn_aplicar = ttk.Button(frame_botoes, text="Aplicar", command=lambda: iniciar_processamento(False))
+        btn_aplicar.grid(row=0, column=1, padx=5)
+
+        btn_excluir = ttk.Button(frame_botoes, text="Excluir Alterações", command=excluir_alteracoes_atuais)
+        btn_excluir.grid(row=0, column=2, padx=5)
+
 
 
 
@@ -1295,7 +1348,7 @@ table_ut_vol.bind("<Double-1>", editar_celula_volume)
 
 frame_secundario = ttk.Frame(app)
 frame_secundario.place(x= 30, y=125)
-button_process = ttk.Button(frame_secundario, text="Processar Planilhas", command=iniciar_processamento, width=40)
+button_process = ttk.Button(frame_secundario, text="Processar Planilhas",  command=lambda: iniciar_processamento(True), width=40)
 button_process.pack(padx=(0,0), pady=(0,0))
 
 # Barra de progresso (inicialmente não exibida)
