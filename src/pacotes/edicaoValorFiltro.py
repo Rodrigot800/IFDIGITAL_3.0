@@ -84,7 +84,7 @@ def abrir_janela_valores_padroes(root):
     input_valor3.insert(0, valor3)
     input_valor3.pack(pady=5)
 
-    # Container para os controles do ALT (checkbutton e input)
+    # Container para os controles do H (checkbutton e input)
     frame_alt_container = tk.Frame(frame_inputs)
     frame_alt_container.pack(pady=5, fill='x')
 
@@ -96,19 +96,19 @@ def abrir_janela_valores_padroes(root):
     
     checkbutton_alt = tk.Checkbutton(
         frame_alt_container,
-        text="ALT > :",
+        text="H > :",
         variable=toggle_alt,
         font=("Arial", 11)
     )
     checkbutton_alt.pack(pady=5)
 
-    # Frame para o campo ALT
+    # Frame para o campo H
     frame_alt = tk.Frame(frame_alt_container)
     input_valor4 = tk.Entry(frame_alt, font=("Arial", 11))
     input_valor4.insert(0, valor4)
     input_valor4.pack(pady=5)
 
-    # Função para alternar a visibilidade do campo ALT
+    # Função para alternar a visibilidade do campo H
     def toggle_alt_input():
         if toggle_alt.get() == 1:
             frame_alt.pack(pady=5, fill='x')
@@ -119,7 +119,7 @@ def abrir_janela_valores_padroes(root):
     
     # Associa a função ao checkbutton
     checkbutton_alt.config(command=toggle_alt_input)
-    # Exibe o campo ALT se estiver ativo inicialmente
+    # Exibe o campo H se estiver ativo inicialmente
     if toggle_alt.get() == 1:
         frame_alt.pack(pady=5, fill='x')
 

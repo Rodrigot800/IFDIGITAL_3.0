@@ -25,7 +25,7 @@ nomes_vulgares = []  # Lista de todos os nomes vulgares
 especies_selecionados = []  # Lista para manter a ordem dos nomes selecionados
 nomes_selecionados  = []
 start_total = None
-ordering_mode = "QF > Vol_m3"
+ordering_mode = "QF > Vol"
 
 df_tabelaDeAjusteVol = None
 global df_valores_atualizados
@@ -260,26 +260,26 @@ def ajustarVolumeHect():
     # Cria uma cópia do DataFrame original para não modificá-lo
     df_modificado = df_saida.copy()
 
-    # Cria as colunas mCAP e mALT com valores padrão: mCAP = 1, mALT = 0
+    # Cria as colunas mCAP e mH com valores padrão: mCAP = 1, mH = 0
     df_modificado["mCAP"] = 1
-    df_modificado["mALT"] = 0
+    df_modificado["mH"] = 0
 
     if 'df_valores_atualizados' in globals() and not df_valores_atualizados.empty:
-        for col in ["mCAP", "mALT"]:
+        for col in ["mCAP", "mH"]:
             # Buscar os valores originais com base no novo nome
             nome_origem = col[1:]  # remove o 'm' do início
             df_valores_atualizados[col] = df_valores_atualizados.get(nome_origem, df_valores_atualizados.get(col))
         
         df_modificado = df_modificado.merge(
-            df_valores_atualizados[["ut", "mCAP", "mALT"]],
+            df_valores_atualizados[["ut", "mCAP", "mH"]],
             left_on="UT", right_on="ut", how="left", suffixes=("", "_novo")
         )
-        for col in ["mCAP", "mALT"]:
+        for col in ["mCAP", "mH"]:
             if f"{col}_novo" in df_modificado.columns:
                 novo_val = df_modificado[f"{col}_novo"]
                 df_modificado[col] = np.where(novo_val.notna(), novo_val, df_modificado[col])
         
-        cols_to_drop = [f"{col}_novo" for col in ["mCAP", "mALT"]]
+        cols_to_drop = [f"{col}_novo" for col in ["mCAP", "mH"]]
         df_modificado.drop(columns=cols_to_drop, inplace=True)
         if "ut" in df_modificado.columns and "UT" in df_modificado.columns:
             df_modificado.drop(columns=["ut"], inplace=True)
@@ -288,9 +288,9 @@ def ajustarVolumeHect():
     df_modificado["ut"] = df_modificado["UT"]
     df_modificado["hac"] = df_modificado["UT_AREA_HA"]
 
-    # Calculando a coluna 'ALT_a' dependendo da condição de 'Categoria'
-    df_modificado["ALT_a"] = df_modificado.apply(
-        lambda row: row["H"] + row["mALT"] if row["Categoria"] == "CORTE" else row["H"],
+    # Calculando a coluna 'H_a' dependendo da condição de 'Categoria'
+    df_modificado["H_a"] = df_modificado.apply(
+        lambda row: row["H"] + row["mH"] if row["Categoria"] == "CORTE" else row["H"],
         axis=1
     )
 
@@ -307,12 +307,12 @@ def ajustarVolumeHect():
         axis=1
     )
 
-    # Aplicando as condições em 'ALT_a' somente para linhas com 'Categoria' igual a 'CORTE'
-    df_modificado["ALT_a"] = df_modificado.apply(
-        lambda row: 10 if row["H"] > 10 and row["ALT_a"] <= 10 else 
-                    row["ALT_a"] if row["H"] > 10 else 
-                    row["H"] if row["ALT_a"] < row["H"] else row["ALT_a"]
-                    if row["Categoria"] == "CORTE" else row["ALT_a"],  # Caso não seja CORTE, mantém o valor original
+    # Aplicando as condições em 'H_a' somente para linhas com 'Categoria' igual a 'CORTE'
+    df_modificado["H_a"] = df_modificado.apply(
+        lambda row: 10 if row["H"] > 10 and row["H_a"] <= 10 else 
+                    row["H_a"] if row["H"] > 10 else 
+                    row["H"] if row["H_a"] < row["H"] else row["H_a"]
+                    if row["Categoria"] == "CORTE" else row["H_a"],  # Caso não seja CORTE, mantém o valor original
         axis=1
     )
 
@@ -339,7 +339,7 @@ def ajustarVolumeHect():
         axis=1
     )
 
-    df_modificado["Vol_a"] = ((df_modificado["DAP_a"] ** 2) * np.pi / 4) * df_modificado["ALT_a"] * 0.7
+    df_modificado["Vol_a"] = ((df_modificado["DAP_a"] ** 2) * np.pi / 4) * df_modificado["H_a"] * 0.7
 
     df_modificado["Categoria"] = df_modificado["Categoria"].astype(str).str.strip().str.upper()
 
@@ -347,7 +347,7 @@ def ajustarVolumeHect():
 
     if df_filtrado.empty:
         print("Nenhuma árvore foi categorizada como 'CORTE'.")
-        df_tabelaDeAjusteVol = df_modificado[["ut", "hac", "mCAP", "mALT", "DAP_a"]].drop_duplicates()
+        df_tabelaDeAjusteVol = df_modificado[["ut", "hac", "mCAP", "mH", "DAP_a"]].drop_duplicates()
         df_tabelaDeAjusteVol["num_arvores"] = 0
         df_tabelaDeAjusteVol["volume_total"] = 0
         df_tabelaDeAjusteVol["diminuir"] = 0
@@ -365,9 +365,9 @@ def ajustarVolumeHect():
         volume_total_por_ut = df_filtrado.groupby("ut")["Vol_a"].sum().reset_index()
         volume_total_por_ut.rename(columns={"Vol_a": "volume_total"}, inplace=True)
         
-        # Cria o DataFrame de ajuste com UT, Hectares, mCAP e mALT
-        df_tabelaDeAjusteVol = df_modificado[["ut", "hac", "mCAP", "mALT", "DAP_a"]].drop_duplicates()
-        print("Dados iniciais de UT, Hectares, mCAP, mALT e DAP_a:")
+        # Cria o DataFrame de ajuste com UT, Hectares, mCAP e mH
+        df_tabelaDeAjusteVol = df_modificado[["ut", "hac", "mCAP", "mH", "DAP_a"]].drop_duplicates()
+        print("Dados iniciais de UT, Hectares, mCAP, mH e DAP_a:")
         print(df_tabelaDeAjusteVol)
 
         # Calcula o volume máximo como (hectares * 30)
@@ -417,7 +417,7 @@ def ajustarVolumeHect():
         aumentar_val = f"{row['aumentar']:.3f}"
         dif_pct_val = f"{row['dif_pct']:.2f}"  # Exibe a diferença percentual
         CAP_val = f"{row['mCAP']:.3f}"
-        ALT_val = f"{row['mALT']:.2f}"
+        ALT_val = f"{row['mH']:.2f}"
 
         # Alterna as cores das linhas (índices pares e ímpares)
         tag = 'verde_claro' if i % 2 == 0 else 'branca'
@@ -681,16 +681,16 @@ def processar_planilhas(save):
         
         # ordenação e prioridade para substituta 
         ordering_mode, df_filtrado
-        if ordering_mode == "QF > Vol_m3":
+        if ordering_mode == "QF > Vol":
             df_filtrado.sort_values(by=["UT", "QF", "Vol"], ascending=[True, False, True], inplace=True)
-            print("-----QF > Vol_m3-----")
-        elif ordering_mode == "Vol_m3 > QF":
+            print("-----QF > Vol-----")
+        elif ordering_mode == "Vol > QF":
             df_filtrado.sort_values(by=["UT", "Vol", "QF"], ascending=[True, True, False], inplace=True)
             print("----------")
         elif ordering_mode == "Apenas QF":
             df_filtrado.sort_values(by=["UT", "QF"], ascending=[True, False], inplace=True)
             print("----------")
-        elif ordering_mode == "Apenas Vol_m3":
+        elif ordering_mode == "Apenas Vol":
             df_filtrado.sort_values(by=["UT", "Vol"], ascending=[True, True], inplace=True)
             print("----------")
         else:
@@ -803,7 +803,7 @@ def processar_planilhas(save):
             print(df_saida)
             if save == True :
                 # Exporta para Excel usando o df_modificado com os cálculos originais
-                df_export = df_saida[["UT", "Faixa", "Placa", "Nome Vulgar", "CAP", "CAP_a", "mCAP", "H", "ALT_a", "mALT", "QF",
+                df_export = df_saida[["UT", "Faixa", "Placa", "Nome Vulgar", "CAP", "CAP_a", "mCAP", "H", "H_a", "mH", "QF",
                                         "X", "Y", "DAP", "DAP_a", "Vol", "Vol_a","Lat", "Long", "DM", "OBS",
                                         "Categoria", "Situacao"]]
                 diretorio = os.path.dirname(entrada1_var.get())
@@ -1252,10 +1252,10 @@ label_texto.pack(side=tk.LEFT, padx=(0, 0))  # Adiciona o texto à esquerda do C
 # Criando o Combobox
 combobox = ttk.Combobox(frame_lado_a_lado, state="readonly", style="TCombobox",
                          values=[
-                             "QF > Vol_m3",
-                             "Vol_m3 > QF",
+                             "QF > Vol",
+                             "Vol > QF",
                              "Apenas QF",
-                             "Apenas Vol_m3"
+                             "Apenas Vol"
                          ])
 combobox.current(0)  # Seleciona a primeira opção por padrão
 combobox.bind("<<ComboboxSelected>>", update_ordering_mode)
@@ -1329,7 +1329,7 @@ frame_tabela2 = ttk.Frame(frame_listbox_e_tabela)
 frame_tabela2.pack(side="right", padx=0, pady=0, fill="y")
 
 # Definição das colunas
-colunas_tabela2 = ("UT", "Hectares", "n° Árv", "Vol(m³)", "Vol_Max", "Diminuir", "Aumentar", "V_m³/ha",
+colunas_tabela2 = ("UT", "Hectares", "n° Árv", "Vol", "Vol_Max", "Diminuir", "Aumentar", "Vol/ha",
  "DAP %", "CAP", "H")
 table_ut_vol = ttk.Treeview(frame_tabela2, columns=colunas_tabela2, show="headings", height=5)
 
