@@ -36,12 +36,12 @@ dados_editados_por_ut = {}
 # Colunas de entrada e saída
 COLUNAS_ENTRADA = [
     "Folha", "Secção", "UT", "Faixa", "Placa", "Cod.", "Nome Vulgar", "CAP", "ALT", "QF",
-    "X", "Y", "DAP", "Volumes (m³)", "Latitude", "Longitude", "DM", "Observações","DAP_C"
+    "X", "Y", "DAP", "Volumes (m³)", "Latitude", "Longitude", "DM", "Observações"
 ]
 
 COLUNAS_SAIDA = [
-    "UT", "Faixa", "Placa", "Nome Vulgar", "Nome Cientifico", "CAP", "ALT", "QF", "X", "Y",
-    "DAP", "Volume_m3", "Latitude", "Longitude", "DM", "Observacoes", "Categoria", "Situacao","UT_AREA_HA"
+    "UT", "Faixa", "Placa", "Nome Vulgar", "Nome Cientifico", "CAP", "H", "QF", "X", "Y",
+    "DAP", "Vol", "Lat", "Long", "DM", "OBS", "Categoria", "Situacao","UT_AREA_HA"
 ]
 
 
@@ -252,6 +252,7 @@ def remover_ultimo_selecionado():
 # Função para limpar todos os itens da tabela
 def limpar_lista_selecionados():
     table_selecionados.delete(*table_selecionados.get_children())
+
 def ajustarVolumeHect():
     global df_tabelaDeAjusteVol, df_valores_atualizados,df_saida
     
@@ -259,24 +260,26 @@ def ajustarVolumeHect():
     # Cria uma cópia do DataFrame original para não modificá-lo
     df_modificado = df_saida.copy()
 
-    # Cria as colunas CAP_m e ALT_m com valores padrão: CAP_m = 1, ALT_m = 0
-    df_modificado["CAP_m"] = 1
-    df_modificado["ALT_m"] = 0
+    # Cria as colunas mCAP e mALT com valores padrão: mCAP = 1, mALT = 0
+    df_modificado["mCAP"] = 1
+    df_modificado["mALT"] = 0
 
     if 'df_valores_atualizados' in globals() and not df_valores_atualizados.empty:
-        for col in ["CAP_m", "ALT_m"]:
-            df_valores_atualizados[col] = df_valores_atualizados.get(col.replace("_m", ""), df_valores_atualizados.get(col))
+        for col in ["mCAP", "mALT"]:
+            # Buscar os valores originais com base no novo nome
+            nome_origem = col[1:]  # remove o 'm' do início
+            df_valores_atualizados[col] = df_valores_atualizados.get(nome_origem, df_valores_atualizados.get(col))
         
         df_modificado = df_modificado.merge(
-            df_valores_atualizados[["ut", "CAP_m", "ALT_m"]],
+            df_valores_atualizados[["ut", "mCAP", "mALT"]],
             left_on="UT", right_on="ut", how="left", suffixes=("", "_novo")
         )
-        for col in ["CAP_m", "ALT_m"]:
+        for col in ["mCAP", "mALT"]:
             if f"{col}_novo" in df_modificado.columns:
                 novo_val = df_modificado[f"{col}_novo"]
                 df_modificado[col] = np.where(novo_val.notna(), novo_val, df_modificado[col])
         
-        cols_to_drop = [f"{col}_novo" for col in ["CAP_m", "ALT_m"]]
+        cols_to_drop = [f"{col}_novo" for col in ["mCAP", "mALT"]]
         df_modificado.drop(columns=cols_to_drop, inplace=True)
         if "ut" in df_modificado.columns and "UT" in df_modificado.columns:
             df_modificado.drop(columns=["ut"], inplace=True)
@@ -285,60 +288,58 @@ def ajustarVolumeHect():
     df_modificado["ut"] = df_modificado["UT"]
     df_modificado["hac"] = df_modificado["UT_AREA_HA"]
 
-    # Calculando a coluna 'ALT_C' dependendo da condição de 'Categoria'
-    df_modificado["ALT_C"] = df_modificado.apply(
-        lambda row: row["ALT"] + row["ALT_m"] if row["Categoria"] == "CORTE" else row["ALT"],
+    # Calculando a coluna 'ALT_a' dependendo da condição de 'Categoria'
+    df_modificado["ALT_a"] = df_modificado.apply(
+        lambda row: row["H"] + row["mALT"] if row["Categoria"] == "CORTE" else row["H"],
         axis=1
     )
 
-    # Calculando a coluna 'CAP_C' dependendo da condição de 'Categoria'
-    df_modificado["CAP_C"] = df_modificado.apply(
-        lambda row: row["CAP"] * row["CAP_m"] if row["Categoria"] == "CORTE" else row["CAP"],
-        axis=1
+    # Calculando a coluna 'CAP_a' dependendo da condição de 'Categoria'
+    df_modificado["CAP_a"] = df_modificado.apply(
+    lambda row: round(row["CAP"] * row["mCAP"]) if row["Categoria"] == "CORTE" else row["CAP"],
+    axis=1
     )
 
 
-    df_modificado["DAP_C"] = df_modificado.apply(
-        lambda row: ((row["CAP_C"] / np.pi) / 100) if row["Categoria"] == "CORTE" else row["DAP"],
+
+    df_modificado["DAP_a"] = df_modificado.apply(
+        lambda row: ((row["CAP_a"] / np.pi) / 100) if row["Categoria"] == "CORTE" else row["DAP"],
         axis=1
     )
 
-    # Aplicando as condições em 'ALT_C' somente para linhas com 'Categoria' igual a 'CORTE'
-    df_modificado["ALT_C"] = df_modificado.apply(
-        lambda row: 10 if row["ALT"] > 10 and row["ALT_C"] <= 10 else 
-                    row["ALT_C"] if row["ALT"] > 10 else 
-                    row["ALT"] if row["ALT_C"] < row["ALT"] else row["ALT_C"]
-                    if row["Categoria"] == "CORTE" else row["ALT_C"],  # Caso não seja CORTE, mantém o valor original
+    # Aplicando as condições em 'ALT_a' somente para linhas com 'Categoria' igual a 'CORTE'
+    df_modificado["ALT_a"] = df_modificado.apply(
+        lambda row: 10 if row["H"] > 10 and row["ALT_a"] <= 10 else 
+                    row["ALT_a"] if row["H"] > 10 else 
+                    row["H"] if row["ALT_a"] < row["H"] else row["ALT_a"]
+                    if row["Categoria"] == "CORTE" else row["ALT_a"],  # Caso não seja CORTE, mantém o valor original
         axis=1
     )
 
-    # Calculando a coluna 'CAP_C' somente para linhas com 'Categoria' igual a 'CORTE'
-    df_modificado["CAP_C"] = df_modificado.apply(
-        lambda row: row["CAP"] * row["CAP_m"] if row["Categoria"] == "CORTE" else row["CAP"],
+    # Calculando a coluna 'CAP_a' somente para linhas com 'Categoria' igual a 'CORTE'
+    df_modificado["CAP_a"] = df_modificado.apply(
+        lambda row: row["CAP"] * row["mCAP"] if row["Categoria"] == "CORTE" else row["CAP"],
         axis=1
     )
 
-    # Aplicando as condições em 'CAP_C' somente para linhas com 'Categoria' igual a 'CORTE'
-    df_modificado["CAP_C"] = df_modificado.apply(
-        lambda row: 158 if row["CAP"] > 158 and row["CAP_C"] <= 158 else  
-                    row["CAP_C"] if row["CAP"] > 158 else  
-                    row["CAP"] if row["CAP_C"] < row["CAP"] else 
-                    min(row["CAP_C"], 628) if row["CAP_C"] >= 680 else row["CAP_C"]
-                    if row["Categoria"] == "CORTE" else row["CAP_C"],  # Caso não seja CORTE, mantém o valor original
+    # Aplicando as condições em 'CAP_a' somente para linhas com 'Categoria' igual a 'CORTE'
+    df_modificado["CAP_a"] = df_modificado.apply(
+        lambda row: 158 if row["CAP"] > 158 and row["CAP_a"] <= 158 else  
+                    row["CAP_a"] if row["CAP"] > 158 else  
+                    row["CAP"] if row["CAP_a"] < row["CAP"] else 
+                    min(row["CAP_a"], 628) if row["CAP_a"] >= 680 else row["CAP_a"]
+                    if row["Categoria"] == "CORTE" else row["CAP_a"],  # Caso não seja CORTE, mantém o valor original
         axis=1
     )
 
-    # Calculando a coluna 'DAP_C' somente para linhas com 'Categoria' igual a 'CORTE'
-    df_modificado["DAP_C"] = df_modificado.apply(
-        lambda row: ((row["CAP_C"] / np.pi) / 100) 
+    # Calculando a coluna 'DAP_a' somente para linhas com 'Categoria' igual a 'CORTE'
+    df_modificado["DAP_a"] = df_modificado.apply(
+        lambda row: ((row["CAP_a"] / np.pi) / 100) 
             if row["Categoria"] == "CORTE" else row["DAP"],  # Caso não seja CORTE, mantém o valor original
         axis=1
     )
 
-    df_modificado["DAP_C"] = pd.to_numeric(df_modificado["DAP_C"], errors='coerce')
-    df_modificado["ALT"] = pd.to_numeric(df_modificado["ALT"], errors='coerce')
-
-    df_modificado["Volume_m3_C"] = ((df_modificado["DAP_C"] ** 2) * np.pi / 4) * df_modificado["ALT_C"] * 0.7
+    df_modificado["Vol_a"] = ((df_modificado["DAP_a"] ** 2) * np.pi / 4) * df_modificado["ALT_a"] * 0.7
 
     df_modificado["Categoria"] = df_modificado["Categoria"].astype(str).str.strip().str.upper()
 
@@ -346,27 +347,27 @@ def ajustarVolumeHect():
 
     if df_filtrado.empty:
         print("Nenhuma árvore foi categorizada como 'CORTE'.")
-        df_tabelaDeAjusteVol = df_modificado[["ut", "hac", "CAP_m", "ALT_m", "DAP_C"]].drop_duplicates()
+        df_tabelaDeAjusteVol = df_modificado[["ut", "hac", "mCAP", "mALT", "DAP_a"]].drop_duplicates()
         df_tabelaDeAjusteVol["num_arvores"] = 0
         df_tabelaDeAjusteVol["volume_total"] = 0
         df_tabelaDeAjusteVol["diminuir"] = 0
         df_tabelaDeAjusteVol["aumentar"] = 0
         df_tabelaDeAjusteVol["media_dif_dap"] = 0
     else:
-        # Agrupa para somar DAP e DAP_C por UT
-        df_soma_dap = df_filtrado.groupby("ut")[["DAP", "DAP_C"]].sum().reset_index()
+        # Agrupa para somar DAP e DAP_a por UT
+        df_soma_dap = df_filtrado.groupby("ut")[["DAP", "DAP_a"]].sum().reset_index()
 
-        # Calcula a diferença percentual entre DAP_C e DAP
-        df_soma_dap["dif_pct"] = ((df_soma_dap["DAP_C"] - df_soma_dap["DAP"]) / df_soma_dap["DAP"]) * 100
+        # Calcula a diferença percentual entre DAP_a e DAP
+        df_soma_dap["dif_pct"] = ((df_soma_dap["DAP_a"] - df_soma_dap["DAP"]) / df_soma_dap["DAP"]) * 100
 
         # Agrupa para contar o número de árvores e somar o volume total por UT
         contagem_arvores = df_filtrado.groupby("ut").size().reset_index(name="num_arvores")
-        volume_total_por_ut = df_filtrado.groupby("ut")["Volume_m3_C"].sum().reset_index()
-        volume_total_por_ut.rename(columns={"Volume_m3_C": "volume_total"}, inplace=True)
+        volume_total_por_ut = df_filtrado.groupby("ut")["Vol_a"].sum().reset_index()
+        volume_total_por_ut.rename(columns={"Vol_a": "volume_total"}, inplace=True)
         
-        # Cria o DataFrame de ajuste com UT, Hectares, CAP_m e ALT_m
-        df_tabelaDeAjusteVol = df_modificado[["ut", "hac", "CAP_m", "ALT_m", "DAP_C"]].drop_duplicates()
-        print("Dados iniciais de UT, Hectares, CAP_m, ALT_m e DAP_C:")
+        # Cria o DataFrame de ajuste com UT, Hectares, mCAP e mALT
+        df_tabelaDeAjusteVol = df_modificado[["ut", "hac", "mCAP", "mALT", "DAP_a"]].drop_duplicates()
+        print("Dados iniciais de UT, Hectares, mCAP, mALT e DAP_a:")
         print(df_tabelaDeAjusteVol)
 
         # Calcula o volume máximo como (hectares * 30)
@@ -415,8 +416,8 @@ def ajustarVolumeHect():
         diminuir_val = f"{row['diminuir']:.3f}"
         aumentar_val = f"{row['aumentar']:.3f}"
         dif_pct_val = f"{row['dif_pct']:.2f}"  # Exibe a diferença percentual
-        CAP_val = f"{row['CAP_m']:.3f}"
-        ALT_val = f"{row['ALT_m']:.2f}"
+        CAP_val = f"{row['mCAP']:.3f}"
+        ALT_val = f"{row['mALT']:.2f}"
 
         # Alterna as cores das linhas (índices pares e ímpares)
         tag = 'verde_claro' if i % 2 == 0 else 'branca'
@@ -469,16 +470,16 @@ def processar_planilhas(save):
             "Placa": "Placa",
             "Nome Vulgar": "Nome Vulgar",
             "CAP": "CAP",
-            "ALT": "ALT",
+            "ALT": "H",
             "QF": "QF",
             "X": "X",
             "Y": "Y",
             "DAP": "DAP",
-            "Volumes (m³)": "Volume_m3",
-            "Latitude": "Latitude",
-            "Longitude": "Longitude",
+            "Volumes (m³)": "Vol",
+            "Latitude": "Lat",
+            "Longitude": "Long",
             "DM": "DM",
-            "Observações": "Observacoes",
+            "Observações": "OBS",
             "UT_AREA_HA" : "UT_AREA_HA",
             "UT_ID" : "UT_ID"
         }.items():
@@ -592,7 +593,7 @@ def processar_planilhas(save):
             if isinstance(row["QF"], int) and row["QF"] >= QF:
                 return "REMANESCENTE"
 
-            if isinstance(row["ALT"], (float, int)) and alt > 0 and row["ALT"] > alt:
+            if isinstance(row["H"], (float, int)) and alt > 0 and row["H"] > alt:
                 return "REMANESCENTE"
 
             return row["Categoria"]
@@ -649,7 +650,7 @@ def processar_planilhas(save):
         )
         
         # **Definir a função de substituição**
-        def definir_sbustituta_vuneravel(quantidade, Situacao, area_hect):
+        def definir_substituta_vuneravel(quantidade, Situacao, area_hect):
             if Situacao == "SEM RESTRIÇÃO":
                 x = np.ceil(quantidade * 0.1)
                 y = np.ceil(area_hect * 0.03)
@@ -664,7 +665,7 @@ def processar_planilhas(save):
 
         # **Aplicar a função para calcular o valor de substituição**
         df_contagem["Valor_Substituta"] = df_contagem.apply(
-            lambda row: definir_sbustituta_vuneravel(row["Quantidade"], row["Situacao"], row["UT_AREA_HA"]), 
+            lambda row: definir_substituta_vuneravel(row["Quantidade"], row["Situacao"], row["UT_AREA_HA"]), 
             axis=1
         )
 
@@ -681,16 +682,16 @@ def processar_planilhas(save):
         # ordenação e prioridade para substituta 
         ordering_mode, df_filtrado
         if ordering_mode == "QF > Vol_m3":
-            df_filtrado.sort_values(by=["UT", "QF", "Volume_m3"], ascending=[True, False, True], inplace=True)
+            df_filtrado.sort_values(by=["UT", "QF", "Vol"], ascending=[True, False, True], inplace=True)
             print("-----QF > Vol_m3-----")
         elif ordering_mode == "Vol_m3 > QF":
-            df_filtrado.sort_values(by=["UT", "Volume_m3", "QF"], ascending=[True, True, False], inplace=True)
+            df_filtrado.sort_values(by=["UT", "Vol", "QF"], ascending=[True, True, False], inplace=True)
             print("----------")
         elif ordering_mode == "Apenas QF":
             df_filtrado.sort_values(by=["UT", "QF"], ascending=[True, False], inplace=True)
             print("----------")
         elif ordering_mode == "Apenas Vol_m3":
-            df_filtrado.sort_values(by=["UT", "Volume_m3"], ascending=[True, True], inplace=True)
+            df_filtrado.sort_values(by=["UT", "Vol"], ascending=[True, True], inplace=True)
             print("----------")
         else:
             print("Modo de ordenação não reconhecido.")
@@ -802,8 +803,8 @@ def processar_planilhas(save):
             print(df_saida)
             if save == True :
                 # Exporta para Excel usando o df_modificado com os cálculos originais
-                df_export = df_saida[["UT", "Faixa", "Placa", "Nome Vulgar", "CAP", "CAP_C", "CAP_m", "ALT", "ALT_C", "ALT_m", "QF",
-                                        "X", "Y", "DAP", "DAP_C", "Volume_m3", "Volume_m3_C","Latitude", "Longitude", "DM",  "Observacoes",
+                df_export = df_saida[["UT", "Faixa", "Placa", "Nome Vulgar", "CAP", "CAP_a", "mCAP", "H", "ALT_a", "mALT", "QF",
+                                        "X", "Y", "DAP", "DAP_a", "Vol", "Vol_a","Lat", "Long", "DM", "OBS",
                                         "Categoria", "Situacao"]]
                 diretorio = os.path.dirname(entrada1_var.get())
                 arquivo_saida = os.path.join(diretorio, "Planilha Processada - IFDIGITAL 3.0.xlsx")
@@ -874,7 +875,7 @@ def abrir_janela_valores_padroes_callback():
     app.wait_window(janela_padrao)
 
 # Índices das colunas que podem ser editadas
-colunas_editaveis = [ "CAP", "ALT"]
+colunas_editaveis = [ "CAP", "H"]
 
 def editar_celula_volume(event):
 
@@ -892,7 +893,7 @@ def editar_celula_volume(event):
 
         agrupado = df_filtrado.groupby("Nome Vulgar").agg(
             num_arvores=('Nome Vulgar', 'count'),
-            volume_total=('Volume_m3_C', 'sum'),
+            volume_total=('Vol_a', 'sum'),
         ).reset_index()
         agrupado["vol_por_ha"] = agrupado["volume_total"] / hectares
 
@@ -907,10 +908,10 @@ def editar_celula_volume(event):
         style.configure("verde.Treeview", background="white")
         style.layout("verde.Treeview", [('Treeview.treearea', {'sticky': 'nswe'})])
 
-        tabela = ttk.Treeview(nova_janela, columns=("Nome", "n° Árvores", "Volume Total", "Vol_m³/ha", "DAP <", "QF >=", "F_REM"),
+        tabela = ttk.Treeview(nova_janela, columns=("Nome", "n° Árvores", "Volume Total", "Vol/ha", "DAP <", "QF >=", "F_REM"),
                             show="headings", height=20, style="verde.Treeview")
 
-        colunas = ("Nome", "n° Árvores", "Volume Total", "Vol_m³/ha", "DAP <", "QF >=", "F_REM")
+        colunas = ("Nome", "n° Árvores", "Volume Total", "Vol/ha", "DAP <", "QF >=", "F_REM")
         for col in colunas:
             tabela.heading(col, text=col)
             tabela.column(col, width=140, anchor="center")
@@ -992,7 +993,7 @@ def editar_celula_volume(event):
                 print("Depois da exclusão:")
                 print(dados_editados_por_ut)
                 nova_janela.destroy()
-                processar_planilhas(False)
+                iniciar_processamento(False)
                 messagebox.showinfo("Alterações Excluídas", f"Todas as alterações da UT '{ut}' foram removidas.")
             else:
                 messagebox.showinfo("Nenhuma Alteração", f"Não há alterações registradas para a UT '{ut}'.")
@@ -1021,11 +1022,11 @@ def editar_celula_volume(event):
         # Agora que temos o item e o evento, podemos usar o evento para identificar a coluna
         coluna_selecionada = table_ut_vol.identify_column(event.x)
         print(f"Coluna clicada: {coluna_selecionada}")
-        # Lógica de ajuste de CAP/ALT
+        # Lógica de ajuste de CAP/H
         print(f"Item selecionado: {item}")
         # Aqui você pode adicionar o que precisa fazer com o item selecionado
         """
-        Permite editar as colunas CAP e ALT ao dar duplo clique em uma célula da Treeview (table_ut_vol).
+        Permite editar as colunas CAP e H ao dar duplo clique em uma célula da Treeview (table_ut_vol).
         Apenas colunas especificadas em 'colunas_editaveis' podem ser editadas.
         """
         global df_tabelaDeAjusteVol, df_valores_atualizados
@@ -1046,7 +1047,7 @@ def editar_celula_volume(event):
 
         # Obtém o nome da coluna correspondente
         col_nome = table_ut_vol["columns"][col_index]
-        # Verifica se a coluna é editável (lista global definida, por exemplo: colunas_editaveis = ["CAP", "ALT"])
+        # Verifica se a coluna é editável (lista global definida, por exemplo: colunas_editaveis = ["CAP", "H"])
         if col_nome not in colunas_editaveis:
             return
 
@@ -1109,17 +1110,17 @@ def editar_celula_volume(event):
             # Atualiza o valor da coluna editada no DataFrame de ajuste
             df_tabelaDeAjusteVol.at[index_df, col_nome] = novo_valor
 
-            # Se a coluna editada for CAP ou ALT, atualiza também o DataFrame global de valores atualizados
-            if col_nome in ["CAP", "ALT"]:
+            # Se a coluna editada for CAP ou H, atualiza também o DataFrame global de valores atualizados
+            if col_nome in ["CAP", "H"]:
                 # Se df_valores_atualizados não existir ou estiver vazio, inicializa-o
                 if 'df_valores_atualizados' not in globals() or df_valores_atualizados.empty:
-                    df_valores_atualizados = pd.DataFrame(columns=["ut", "CAP", "ALT"])
+                    df_valores_atualizados = pd.DataFrame(columns=["ut", "CAP", "H"])
                 # Procura se já existe uma linha para essa UT
                 idx_val_series = df_valores_atualizados[df_valores_atualizados["ut"] == ut_val].index
                 if not idx_val_series.empty:
                     df_valores_atualizados.at[idx_val_series[0], col_nome] = novo_valor
                 else:
-                    nova_linha = {"ut": ut_val, "CAP": np.nan, "ALT": np.nan}
+                    nova_linha = {"ut": ut_val, "CAP": np.nan, "H": np.nan}
                     nova_linha[col_nome] = novo_valor
                     df_valores_atualizados = pd.concat([df_valores_atualizados, pd.DataFrame([nova_linha])], ignore_index=True)
 
@@ -1150,8 +1151,8 @@ def editar_celula_volume(event):
     elif coluna_clicada == "#10":  # A coluna CAP é a coluna #10
         # Se for a coluna "CAP", chama a função para editar a célula de CAP
         ajustarCAP_ALT(item,event)
-    elif coluna_clicada == "#11":  # A coluna ALT é a coluna #11
-        # Se for a coluna "ALT", chama a função para editar a célula de ALT
+    elif coluna_clicada == "#11":  # A coluna H é a coluna #11
+        # Se for a coluna "H", chama a função para editar a célula de H
         ajustarCAP_ALT(item,event)
     else:
         print(f"Cliquei na coluna {coluna_clicada}, mas não tem ação associada.")
@@ -1287,7 +1288,7 @@ pesquisa_entry.pack(side="left", padx=5)
 # Vinculando evento de pesquisa
 pesquisa_entry.bind("<KeyRelease>", pesquisar_nomes)
 
-colunas_selecionados = ("Nome", "DAP <", "DAP >=", "QF = ", "ALT >")
+colunas_selecionados = ("Nome", "DAP <", "DAP >=", "QF = ", "H >")
 
 table_selecionados = ttk.Treeview(frame_listbox, columns=colunas_selecionados, show="headings", height=15)
 for col in colunas_selecionados:
@@ -1329,7 +1330,7 @@ frame_tabela2.pack(side="right", padx=0, pady=0, fill="y")
 
 # Definição das colunas
 colunas_tabela2 = ("UT", "Hectares", "n° Árv", "Vol(m³)", "Vol_Max", "Diminuir", "Aumentar", "V_m³/ha",
- "DAP %", "CAP", "ALT")
+ "DAP %", "CAP", "H")
 table_ut_vol = ttk.Treeview(frame_tabela2, columns=colunas_tabela2, show="headings", height=5)
 
 # Configuração das colunas
