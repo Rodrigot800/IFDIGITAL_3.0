@@ -30,6 +30,8 @@ ordering_mode = "QF > Vol_m3"
 df_tabelaDeAjusteVol = None
 global df_valores_atualizados
 global  df_saida 
+dados_editados_por_ut = {}
+
 
 # Colunas de entrada e saída
 COLUNAS_ENTRADA = [
@@ -849,10 +851,12 @@ colunas_editaveis = [ "CAP", "ALT"]
 def editar_celula_volume(event):
 
     def editarEspeciesUT(event):
+        global dados_editados_por_ut
         item = table_ut_vol.selection()[0]
         ut = table_ut_vol.item(item, "values")[0]
+        valores_ut = table_ut_vol.item(item, "values")
+        hectares = float(valores_ut[1])
 
-        # Garante que a coluna F_REM existe
         if "F_REM" not in df_saida.columns:
             df_saida["F_REM"] = ""
 
@@ -864,51 +868,99 @@ def editar_celula_volume(event):
         agrupado = df_filtrado.groupby("Nome Vulgar").agg(
             num_arvores=('Nome Vulgar', 'count'),
             volume_total=('Volume_m3_C', 'sum'),
+            dap_menor=('DAP', lambda x: (x < 30).sum()),
+            qf_maiorouIgual=('QF', lambda x: (x == 1).sum()),
         ).reset_index()
+        agrupado["vol_por_ha"] = agrupado["volume_total"] / hectares
 
         nova_janela = tk.Toplevel()
         nova_janela.title(f"Espécies da UT {ut}")
-        nova_janela.geometry("900x500")
+        nova_janela.geometry("1050x700")
 
-        colunas = ("Nome", "n° Árvores", "Volume Total", "F_REM")
-        tabela = ttk.Treeview(nova_janela, columns=colunas, show="headings")
+        # Estilo para alternar as cores das linhas
+        style = ttk.Style()
+        style.configure("Treeview", rowheight=25)
+        style.map("Treeview", background=[('selected', '#38761d')], foreground=[('selected', 'white')])
+        style.configure("verde.Treeview", background="white")
+        style.layout("verde.Treeview", [('Treeview.treearea', {'sticky': 'nswe'})])
 
+        tabela = ttk.Treeview(nova_janela, columns=("Nome", "n° Árvores", "Volume Total", "Vol_m³/ha", "DAP <", "QF >=", "F_REM"),
+                            show="headings", height=20, style="verde.Treeview")
+
+        colunas = ("Nome", "n° Árvores", "Volume Total", "Vol_m³/ha", "DAP <", "QF >=", "F_REM")
         for col in colunas:
             tabela.heading(col, text=col)
-            tabela.column(col, width=150, anchor="center")
+            tabela.column(col, width=140, anchor="center")
 
-        combobox_refs = {}
+        tabela.pack(pady=10, padx=10, fill="x")
 
+        # Preenche a tabela com cores alternadas
         for i, row in agrupado.iterrows():
             nome = row["Nome Vulgar"]
-            num = row["num_arvores"]
-            vol = f"{row['volume_total']:.2f}"
-            tabela.insert("", "end", iid=str(i), values=(nome, num, vol, ""))
+            dados_salvos = dados_editados_por_ut.get(ut, {}).get(nome, {})
 
-        tabela.pack(pady=10, fill="both", expand=True)
+            valores = [
+                nome,
+                row["num_arvores"],
+                f"{row['volume_total']:.2f}",
+                f"{row['vol_por_ha']:.2f}",
+                dados_salvos.get("DAP <", ""),
+                dados_salvos.get("QF >=", ""),
+                dados_salvos.get("F_REM", "NÃO")
+            ]
 
-        # Cria comboboxes editáveis em cada linha para a coluna F_REM
-        for i, row in agrupado.iterrows():
-            bbox = tabela.bbox(str(i), 3)
-            if bbox:
-                x, y, w, h = bbox
-                combo = ttk.Combobox(nova_janela, values=["SIM", "NÃO"], width=10)
-                combo.place(x=x + 10, y=y + 80, width=w)
-                combo.set("")  # valor inicial
-                combobox_refs[row["Nome Vulgar"]] = combo
+            tag = 'verde' if i % 2 == 0 else 'branco'
+            tabela.insert("", "end", iid=nome, values=valores, tags=(tag,))
+
+        tabela.tag_configure('verde', background="#e5fbe0")
+        tabela.tag_configure('branco', background="#ffffff")
+
+        # Área de edição
+        frame_edicao = ttk.LabelFrame(nova_janela, text="Editar Espécie Selecionada")
+        frame_edicao.pack(fill="x", padx=10, pady=10)
+
+        entradas = {}
+        for i, campo in enumerate(colunas[4:]):
+            ttk.Label(frame_edicao, text=campo).grid(row=0, column=i, padx=5)
+            if campo == "F_REM":
+                combo = ttk.Combobox(frame_edicao, values=["SIM","NÃO"], state="readonly", width=10)
+                combo.grid(row=1, column=i, padx=5)
+                entradas[campo] = combo
+            else:
+                entry = ttk.Entry(frame_edicao, width=10)
+                entry.grid(row=1, column=i, padx=5)
+                entradas[campo] = entry
+
+        especie_selecionada = tk.StringVar()
+
+        def ao_selecionar_linha(event):
+            item = tabela.selection()
+            if item:
+                nome = item[0]
+                especie_selecionada.set(nome)
+                dados = tabela.item(nome, "values")
+                for i, campo in enumerate(colunas[4:]):
+                    entradas[campo].delete(0, tk.END)
+                    entradas[campo].insert(0, dados[i + 4])
+
+        tabela.bind("<<TreeviewSelect>>", ao_selecionar_linha)
 
         def salvar_dados():
-            for nome, combo in combobox_refs.items():
-                valor_f_rem = combo.get()
-                # Atualiza a coluna F_REM no df_saida para todas as linhas da UT e Nome Vulgar
-                cond = (df_saida["UT"] == int(ut)) & (df_saida["Nome Vulgar"] == nome)
-                df_saida.loc[cond, "F_REM"] = valor_f_rem
-            print(f"Dados F_REM atualizados para UT {ut}.")
+            nome = especie_selecionada.get()
+            if not nome:
+                return
+            if ut not in dados_editados_por_ut:
+                dados_editados_por_ut[ut] = {}
+            dados_editados_por_ut[ut][nome] = {
+                campo: entradas[campo].get() for campo in entradas
+            }
+            print(f"Salvo UT {ut} - {nome}: {dados_editados_por_ut[ut][nome]}")
+            # Atualiza visualmente a tabela
+            valores_atualizados = tabela.item(nome, "values")[:4] + tuple(entradas[campo].get() for campo in entradas)
+            tabela.item(nome, values=valores_atualizados)
 
-        botao_salvar = ttk.Button(nova_janela, text="Salvar", command=salvar_dados)
-        botao_salvar.pack(pady=10)
-
-
+        btn_salvar = ttk.Button(nova_janela, text="Salvar Alterações", command=salvar_dados)
+        btn_salvar.pack(pady=10)
 
 
 
