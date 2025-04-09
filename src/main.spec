@@ -1,12 +1,25 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_all
+
+datas = [('img', 'img')]
+binaries = []
+hiddenimports = ['openpyxl', 'pandas', 'tkinter', 'configparser', 'numpy', 'xlsxwriter']
+tmp_ret = collect_all('openpyxl')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('pandas')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('numpy')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+tmp_ret = collect_all('xlsxwriter')
+datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 
 
 a = Analysis(
     ['main.py'],
     pathex=[],
-    binaries=[],
-    datas=[('C:\\Users\\Rodrigo Peixoto\\Documents\\GitHub\\IFDIGITAL_3.0\\src\\icone ifdigital.ico', 'src'), ('C:\\Users\\Rodrigo Peixoto\\Documents\\GitHub\\IFDIGITAL_3.0\\src\\01florest.png', 'src')],
-    hiddenimports=['openpyxl', 'pandas', 'tkinter', 'configparser', 'numpy', 'xlsxwriter', 'PIL.Image', 'PIL.ImageTk', 'tkinter.PhotoImage'],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

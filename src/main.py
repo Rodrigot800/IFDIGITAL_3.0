@@ -223,28 +223,39 @@ def editar_linha(event):
 
 # Função para selecionar todos os itens da Listbox
 def selecionar_todos():
-    # Carrega os valores do config.ini
-    config.read("config.ini")  # Garante que estamos lendo a versão mais recente do arquivo
+    # Recarrega os valores do config.ini
+    config.read("config.ini")
 
     dap_max = config.getfloat("DEFAULT", "dapmax", fallback=0.5)
     dap_min = config.getfloat("DEFAULT", "dapmin", fallback=5)
     qf = config.getint("DEFAULT", "qf", fallback=3)
     alt = config.getfloat("DEFAULT", "alt", fallback=0)
+    cap = config.getfloat("DEFAULT", "cap", fallback=2.5)
 
-    # Percorre todos os nomes vulgares e adiciona à tabela se não existirem
-    for nome in nomes_vulgares:
-        # Verifica se o nome já existe na tabela para evitar duplicação
+    # Se alt for 0, substituir por string vazia
+    alt = "" if alt == 0 else alt
+
+    count_existentes = len(table_selecionados.get_children())
+
+    for i, nome in enumerate(nomes_vulgares):
+        # Verifica se já está na tabela
         is_duplicate = any(table_selecionados.item(child, "values")[0] == nome for child in table_selecionados.get_children())
         
-        if not is_duplicate:  # Só adiciona se o nome não estiver na tabela
-            # Adiciona os dados na tabela com valores do config.ini
-            valores_atualizados = (nome, dap_max, dap_min, qf, alt)
-            table_selecionados.insert("", "end", values=valores_atualizados)
-            print(f"{nome} foi adicionado à tabela.")  # Mensagem de depuração para verificar se está sendo adicionado
+        if not is_duplicate:
+            # Alterna as cores
+            tag = 'verde_claro' if (count_existentes + i) % 2 == 0 else 'branca'
+
+            valores_atualizados = (nome, dap_max, dap_min, qf, alt, cap)
+            table_selecionados.insert("", "end", values=valores_atualizados, tags=(tag,))
+            print(f"{nome} foi adicionado à tabela.")
         else:
-            print(f"{nome} já está na tabela.")  # Mensagem de depuração para duplicação
+            print(f"{nome} já está na tabela.")
+
+    table_selecionados.tag_configure('branca', background='white')
+    table_selecionados.tag_configure('verde_claro', background='#d3f8e2')
 
     print("Todos os itens de 'nomes_vulgares' foram processados.")
+
 
 # Função para remover o último item da tabela
 def remover_ultimo_selecionado():
@@ -1196,41 +1207,34 @@ def alternar_tabela():
     if tabela_visivel:
         frame_tabela2.pack_forget()
         frame_resumo_especie.pack(fill="both", expand=True)
-        botao_trocar_tabela.config(text="Mostrar Tabela de Edição")
+        botao_trocar_tabela.config(text="Exibir Tabela de Edição")
         tabela_visivel = False
     else:
         frame_resumo_especie.pack_forget()
         frame_tabela2.pack(fill="both", expand=True)
-        botao_trocar_tabela.config(text="Ocultar Tabela de Edição")
+        botao_trocar_tabela.config(text="Exibir Tabela resumo")
         tabela_visivel = True
 
 
-def definir_icone(app):
+# Função para garantir o caminho correto tanto no executável quanto no script de desenvolvimento
+def resource_path(relative_path):
+    """ Garante o caminho certo tanto no executável quanto em desenvolvimento """
     try:
-        # Verifica se o script está sendo executado como executável (PyInstaller)
-        if getattr(sys, 'frozen', False):
-            # Quando o aplicativo é compilado, os arquivos são extraídos para o diretório _MEIPASS
-            base_path = sys._MEIPASS
-        else:
-            # Durante o desenvolvimento, usa o diretório do script
-            base_path = os.path.dirname(os.path.abspath(__file__))
-        
-        # Caminho do ícone relativo ao diretório correto
-        icone_path = os.path.join(base_path, "", "icone ifdigital.ico")
-        
-        # Define o ícone para a janela
-        app.iconbitmap(icone_path)
-        print(f"Ícone carregado com sucesso a partir de: {icone_path}")
+        base_path = sys._MEIPASS  # Caso o script esteja executando como .exe (PyInstaller)
+    except Exception:
+        base_path = os.path.abspath(".")  # Caso esteja executando como script
 
-    except Exception as e:
-        print(f"Erro ao carregar o ícone: {e}")
+    return os.path.join(base_path, relative_path)
 
 # Criação da janela principal
 app = tk.Tk()
 app.title("IFDIGITAL 3.0")
 
-# Chama a função para definir o ícone
-definir_icone(app)
+# Caminho para o ícone da janela
+icone_path = resource_path("src/img/icone ifdigital.ico")
+
+# Define o ícone da aplicação
+app.iconbitmap(icone_path)
 
 # Dimensões da janela
 largura_janela = 1600
@@ -1261,14 +1265,14 @@ app.geometry(f"{largura_janela}x{altura_janela}+{pos_x}+{pos_y}")
 app.resizable(False, False)  # Permite redimensionamento
 app.maxsize(largura_janela, altura_janela)  # Impede que a janela seja maximizada
 
-# Carregar imagem de fundo corretamente
-caminho_imagem = os.path.join("src", "01florest.png")  # Ajuste conforme necessário
+# Caminho da imagem de fundo
+caminho_imagem = resource_path("src/img/01florest.png")
 
+# Verificar se a imagem existe
 if not os.path.exists(caminho_imagem):
     print(f"Erro: Arquivo {caminho_imagem} não encontrado!")
 
-# Variável global para manter a imagem na memória
-global fundo_tk  
+# Abre a imagem e ajusta seu tamanho
 imagem_fundo = Image.open(caminho_imagem)
 imagem_fundo = imagem_fundo.resize((largura_janela, altura_janela), Image.Resampling.LANCZOS)
 fundo_tk = ImageTk.PhotoImage(imagem_fundo)
@@ -1366,13 +1370,24 @@ pesquisa_entry.bind("<KeyRelease>", pesquisar_nomes)
 
 colunas_selecionados = ("Nome", "DAP <", "DAP >=", "QF = ", "H >")
 
-table_selecionados = ttk.Treeview(frame_listbox, columns=colunas_selecionados, show="headings", height=15)
+# Cria a Treeview
+table_selecionados = ttk.Treeview(
+    frame_listbox, columns=colunas_selecionados, show="headings", height=15
+)
+
+# Configura os títulos e colunas
 for col in colunas_selecionados:
     table_selecionados.heading(col, text=col)
     table_selecionados.column(col, width=50, anchor="center")
-    table_selecionados.column("Nome", width=200, anchor="w") 
-table_selecionados.grid(row=1, column=1, padx=10, pady=10)
+table_selecionados.column("Nome", width=200, anchor="w")
 
+# Scrollbar vertical
+scrollbar_y = ttk.Scrollbar(frame_listbox, orient="vertical", command=table_selecionados.yview)
+table_selecionados.configure(yscrollcommand=scrollbar_y.set)
+
+# Posiciona na grid
+table_selecionados.grid(row=1, column=1, padx=10, pady=10)
+scrollbar_y.grid(row=1, column=2, sticky="ns")
 
 # Criando a Listbox com os nomes vulgares
 listbox_nomes_vulgares = tk.Listbox(frame_listbox, selectmode=tk.SINGLE, width=25, height=20)
