@@ -32,6 +32,9 @@ global df_valores_atualizados
 global  df_saida 
 dados_editados_por_ut = {}
 
+# Flag que indica se a tabela está visível ou não
+tabela_visivel = True
+
 
 # Colunas de entrada e saída
 COLUNAS_ENTRADA = [
@@ -253,6 +256,45 @@ def remover_ultimo_selecionado():
 def limpar_lista_selecionados():
     table_selecionados.delete(*table_selecionados.get_children())
 
+def tabelaDeResumo():
+     # Exemplo de dados (você pode substituir com os seus)
+    dados = [
+        {
+            "especie": "Bertholletia excelsa",
+            "n_arvores": 50,
+            "vol_arvore": 0.8,
+            "vol_ajustado": 40,
+            "vol_arvore_ajustado": 0.7,
+            "vol_ha": 5.5,
+            "cap_min": 45
+        },
+        {
+            "especie": "Swietenia macrophylla",
+            "n_arvores": 30,
+            "vol_arvore": 1.2,
+            "vol_ajustado": 36,
+            "vol_arvore_ajustado": 1.0,
+            "vol_ha": 4.2,
+            "cap_min": 50
+        }
+    ]
+
+    # Limpa a tabela antes de inserir novos dados
+    for item in table_resumo_especie.get_children():
+        table_resumo_especie.delete(item)
+
+    # Insere os dados na tabela
+    for item in dados:
+        table_resumo_especie.insert("", "end", values=(
+            item["especie"],
+            item["n_arvores"],
+            item["vol_arvore"],
+            item["vol_ajustado"],
+            item["vol_arvore_ajustado"],
+            item["vol_ha"],
+            item["cap_min"]
+        ))
+
 def ajustarVolumeHect():
     global df_tabelaDeAjusteVol, df_valores_atualizados,df_saida
     
@@ -293,14 +335,12 @@ def ajustarVolumeHect():
         lambda row: row["H"] + row["mH"] if row["Categoria"] == "CORTE" else row["H"],
         axis=1
     )
-
-    # Calculando a coluna 'CAP_a' dependendo da condição de 'Categoria'
+    
+    # Calculando a coluna 'CAP_a' somente para linhas com 'Categoria' igual a 'CORTE'
     df_modificado["CAP_a"] = df_modificado.apply(
-    lambda row: round(row["CAP"] * row["mCAP"]) if row["Categoria"] == "CORTE" else row["CAP"],
-    axis=1
+        lambda row: round(row["CAP"] * row["mCAP"]) if row["Categoria"] == "CORTE" else row["CAP"],
+        axis=1
     )
-
-
 
     df_modificado["DAP_a"] = df_modificado.apply(
         lambda row: ((row["CAP_a"] / np.pi) / 100) if row["Categoria"] == "CORTE" else row["DAP"],
@@ -316,11 +356,6 @@ def ajustarVolumeHect():
         axis=1
     )
 
-    # Calculando a coluna 'CAP_a' somente para linhas com 'Categoria' igual a 'CORTE'
-    df_modificado["CAP_a"] = df_modificado.apply(
-        lambda row: row["CAP"] * row["mCAP"] if row["Categoria"] == "CORTE" else row["CAP"],
-        axis=1
-    )
 
     # Aplicando as condições em 'CAP_a' somente para linhas com 'Categoria' igual a 'CORTE'
     df_modificado["CAP_a"] = df_modificado.apply(
@@ -784,10 +819,10 @@ def processar_planilhas(save):
         print(f"REMANESCENTE: {contagem_categorias.get('REMANESCENTE', 0)}")
 
         print(f"Numero total de linhas em df_saida: {len(df_saida)}")
-        
+        tabelaDeResumo()
         finalProcesso = time.time()
         print(f"Processamento realizado em {finalProcesso - inicioProcesso:.2f} s")
-
+        
         inicioTimeSalvar = time.time()
         #organizando as colunas
         df_saida = df_saida[COLUNAS_SAIDA]
@@ -901,12 +936,6 @@ def editar_celula_volume(event):
         nova_janela.title(f"Espécies da UT {ut}")
         nova_janela.geometry("1050x700")
 
-        # Estilo para alternar as cores das linhas
-        style = ttk.Style()
-        style.configure("Treeview", rowheight=25)
-        style.map("Treeview", background=[('selected', '#38761d')], foreground=[('selected', 'white')])
-        style.configure("verde.Treeview", background="white")
-        style.layout("verde.Treeview", [('Treeview.treearea', {'sticky': 'nswe'})])
 
         tabela = ttk.Treeview(nova_janela, columns=("Nome", "n° Árvores", "Volume Total", "Vol/ha", "DAP <", "QF >=", "F_REM"),
                             show="headings", height=20, style="verde.Treeview")
@@ -1157,6 +1186,20 @@ def editar_celula_volume(event):
     else:
         print(f"Cliquei na coluna {coluna_clicada}, mas não tem ação associada.")
 
+def alternar_tabela():
+    global tabela_visivel
+
+    if tabela_visivel:
+        frame_tabela2.pack_forget()
+        frame_resumo_especie.pack(fill="both", expand=True)
+        botao_trocar_tabela.config(text="Mostrar Tabela de Edição")
+        tabela_visivel = False
+    else:
+        frame_resumo_especie.pack_forget()
+        frame_tabela2.pack(fill="both", expand=True)
+        botao_trocar_tabela.config(text="Ocultar Tabela de Edição")
+        tabela_visivel = True
+
 
 def definir_icone(app):
     try:
@@ -1192,6 +1235,13 @@ altura_janela = 900
 # Obter largura e altura da tela
 largura_tela = app.winfo_screenwidth()
 altura_tela = app.winfo_screenheight()
+
+# Estilo para alternar as cores das linhas
+style = ttk.Style()
+style.configure("Treeview", rowheight=20)
+style.map("Treeview", background=[('selected', '#38761d')], foreground=[('selected', 'white')])
+style.configure("verde.Treeview", background="white")
+style.layout("verde.Treeview", [('Treeview.treearea', {'sticky': 'nswe'})])
 
 # Calcular coordenadas para centralizar a janela
 pos_x = (largura_tela - largura_janela) // 2
@@ -1238,27 +1288,46 @@ ttk.Label(frame_inputs, text="LISTA DE ESPECIES :").grid(row=1, column=0, sticky
 ttk.Entry(frame_inputs, textvariable=entrada2_var, width=60).grid(row=1, column=1, pady=5, padx=5)
 ttk.Button(frame_inputs, text="Selecionar", command=lambda: selecionar_arquivos("secundaria")).grid(row=1, column=2, padx=5)
 
+# Frame para organizar os widgets lado a lado
 frame_lado_a_lado = tk.Frame(app)
-frame_lado_a_lado.place(x= 30, y=125)
+frame_lado_a_lado.place(x=30, y=125)
 
-botao_modificar_filtro = ttk.Button(frame_lado_a_lado, text="Modificar Filtragem para REM", 
-                                    command=abrir_janela_valores_padroes_callback)
+# Botão para modificar a filtragem para REM
+botao_modificar_filtro = ttk.Button(
+    frame_lado_a_lado,
+    text="Modificar Filtragem para REM",
+    command=abrir_janela_valores_padroes_callback
+)
 botao_modificar_filtro.pack(side=tk.LEFT, padx=50)
 
-# Criando o Label adicional
-label_texto = ttk.Label(frame_lado_a_lado, text="Ordenação de Substituta:")  
-label_texto.pack(side=tk.LEFT, padx=(0, 0))  # Adiciona o texto à esquerda do Combobox
+# Label de texto antes do combobox
+label_texto = ttk.Label(frame_lado_a_lado, text="Ordenação de Substituta:")
+label_texto.pack(side=tk.LEFT, padx=(0, 0))
 
-# Criando o Combobox
-combobox = ttk.Combobox(frame_lado_a_lado, state="readonly", style="TCombobox",
-                         values=[
-                             "QF > Vol",
-                             "Vol > QF",
-                             "Apenas QF",
-                             "Apenas Vol"
-                         ])
-combobox.current(0)  # Seleciona a primeira opção por padrão
+# Combobox com opções de ordenação
+combobox = ttk.Combobox(
+    frame_lado_a_lado,
+    state="readonly",
+    style="TCombobox",
+    values=[
+        "QF > Vol",
+        "Vol > QF",
+        "Apenas QF",
+        "Apenas Vol"
+    ]
+)
+combobox.current(0)
 combobox.bind("<<ComboboxSelected>>", update_ordering_mode)
+combobox.pack(side=tk.LEFT, padx=10)
+
+# Novo botão para alternar entre a tabela de ajustes e a de resumo
+botao_trocar_tabela = ttk.Button(
+    frame_lado_a_lado,
+    text="Mostrar Tabela de Resumo",  # ou "Mostrar Tabela de Ajustes" dependendo do estado atual
+    command=alternar_tabela
+)
+botao_trocar_tabela.pack(side=tk.RIGHT, padx=(0))
+
 
 # Exibindo o Combobox
 combobox.pack(side=tk.LEFT)
@@ -1324,26 +1393,50 @@ btn_limpar.pack(side="left", padx=10)
 
 #frma para a tabela de ajuste de volume por hectar 
 
-# Segunda tabela com "UT" e "Vol/Hect Total"
-frame_tabela2 = ttk.Frame(frame_listbox_e_tabela)
-frame_tabela2.pack(side="right", padx=0, pady=0, fill="y")
+frame_tabela_container = ttk.Frame(frame_listbox_e_tabela)
+frame_tabela_container.pack(side="right", fill="both", expand=True)
 
-# Definição das colunas
+# Frame da tabela de edição
+frame_tabela2 = ttk.Frame(frame_tabela_container)
+
 colunas_tabela2 = ("UT", "Hectares", "n° Árv", "Vol", "Vol_Max", "Diminuir", "Aumentar", "Vol/ha",
- "DAP %", "CAP", "H")
-table_ut_vol = ttk.Treeview(frame_tabela2, columns=colunas_tabela2, show="headings", height=5)
+                   "DAP %", "CAP", "H")
 
-# Configuração das colunas
+table_ut_vol = ttk.Treeview(frame_tabela2, columns=colunas_tabela2, show="headings", height=22)
 for col in colunas_tabela2:
     table_ut_vol.heading(col, text=col)
     table_ut_vol.column(col, width=75, anchor="center")
-
-table_ut_vol.pack(pady=0)
-table_ut_vol.config(height=22)
-
-# Adiciona evento de duplo clique para editar
+table_ut_vol.pack(fill="both", expand=True)
 table_ut_vol.bind("<Double-1>", editar_celula_volume)
 
+frame_tabela2.pack(fill="both", expand=True)  # Mostra a de edição inicialmente
+tabela_visivel = True
+
+# Frame da tabela de resumo
+frame_resumo_especie = ttk.Frame(frame_tabela_container)
+
+colunas_resumo_especie = (
+    "Espécie", "n° Árvores", "Vol/Árvore", "Vol Ajustado",
+    "Vol/Árvore Ajustado", "Vol/ha", "CAP_min"
+)
+
+table_resumo_especie = ttk.Treeview(
+    frame_resumo_especie,
+    columns=colunas_resumo_especie,
+    show="headings",
+    height=22
+)
+for col in colunas_resumo_especie:
+    table_resumo_especie.heading(col, text=col)
+    table_resumo_especie.column(col, width=120, anchor="center")
+
+# Scroll
+scroll_resumo_especie = ttk.Scrollbar(frame_resumo_especie, orient="vertical", command=table_resumo_especie.yview)
+table_resumo_especie.configure(yscrollcommand=scroll_resumo_especie.set)
+
+# Packing
+table_resumo_especie.pack(side="left", fill="both", expand=True)
+scroll_resumo_especie.pack(side="right", fill="y")
 
 # Frame para o botão de processamento
 
