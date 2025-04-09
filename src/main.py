@@ -257,43 +257,45 @@ def limpar_lista_selecionados():
     table_selecionados.delete(*table_selecionados.get_children())
 
 def tabelaDeResumo():
-     # Exemplo de dados (você pode substituir com os seus)
-    dados = [
-        {
-            "especie": "Bertholletia excelsa",
-            "n_arvores": 50,
-            "vol_arvore": 0.8,
-            "vol_ajustado": 40,
-            "vol_arvore_ajustado": 0.7,
-            "vol_ha": 5.5,
-            "cap_min": 45
-        },
-        {
-            "especie": "Swietenia macrophylla",
-            "n_arvores": 30,
-            "vol_arvore": 1.2,
-            "vol_ajustado": 36,
-            "vol_arvore_ajustado": 1.0,
-            "vol_ha": 4.2,
-            "cap_min": 50
-        }
-    ]
-
-    # Limpa a tabela antes de inserir novos dados
+    # Limpa a tabela antes de preencher de novo
     for item in table_resumo_especie.get_children():
         table_resumo_especie.delete(item)
 
-    # Insere os dados na tabela
-    for item in dados:
-        table_resumo_especie.insert("", "end", values=(
-            item["especie"],
-            item["n_arvores"],
-            item["vol_arvore"],
-            item["vol_ajustado"],
-            item["vol_arvore_ajustado"],
-            item["vol_ha"],
-            item["cap_min"]
-        ))
+    # Cópia e filtro
+    df_resumo_especies = df_saida.copy()
+    df_resumo_especies = df_resumo_especies[df_resumo_especies["Categoria"] == "CORTE"]
+
+    # Agrupamento por espécie
+    agrupado = df_resumo_especies.groupby("Nome Vulgar")
+
+    for i, (especie, grupo) in enumerate(agrupado):
+        qtd_arvores = len(grupo)
+        soma_vol = grupo["Vol"].sum()
+        soma_vol_a = grupo["Vol_a"].sum()
+        vol_por_arvore = soma_vol / qtd_arvores if qtd_arvores > 0 else 0.0
+        vol_a_por_arvore = soma_vol_a / qtd_arvores if qtd_arvores > 0 else 0.0
+
+        df_uts_hectares = grupo[["UT", "UT_AREA_HA"]].drop_duplicates()
+        soma_hectares = df_uts_hectares["UT_AREA_HA"].sum()
+        vol_ha = soma_vol_a / soma_hectares if soma_hectares > 0 else 0.0
+
+        cap_min = grupo["CAP_a"].min()
+
+        valores = (
+            especie,
+            qtd_arvores,
+            round(soma_vol, 2),
+            round(vol_por_arvore, 2),
+            round(soma_vol_a, 2),
+            round(vol_a_por_arvore, 2),
+            round(vol_ha, 2),
+            round(cap_min, 2)
+        )
+
+        # Alterna entre tags
+        tag = "linha_verde" if i % 2 == 0 else "linha_branca"
+        table_resumo_especie.insert("", "end", values=valores, tags=(tag,))
+
 
 def ajustarVolumeHect():
     global df_tabelaDeAjusteVol, df_valores_atualizados,df_saida
@@ -819,11 +821,11 @@ def processar_planilhas(save):
         print(f"REMANESCENTE: {contagem_categorias.get('REMANESCENTE', 0)}")
 
         print(f"Numero total de linhas em df_saida: {len(df_saida)}")
-        tabelaDeResumo()
+        
         finalProcesso = time.time()
         print(f"Processamento realizado em {finalProcesso - inicioProcesso:.2f} s")
         
-        inicioTimeSalvar = time.time()
+        
         #organizando as colunas
         df_saida = df_saida[COLUNAS_SAIDA]
 
@@ -831,9 +833,11 @@ def processar_planilhas(save):
             print(f"CORTE: {contagem_categorias['CORTE']}")
             print(f"SUBSTITUTA: {contagem_categorias.get('SUBSTITUTA', 0)}")
             print(f"REMANESCENTE: {contagem_categorias.get('REMANESCENTE', 0)}")
-
-            df_saida = ajustarVolumeHect()
             
+            df_saida = ajustarVolumeHect()
+            tabelaDeResumo()
+
+            inicioTimeSalvar = time.time()
             print("dentro de processo")
             print(df_saida)
             if save == True :
@@ -1243,6 +1247,9 @@ style.map("Treeview", background=[('selected', '#38761d')], foreground=[('select
 style.configure("verde.Treeview", background="white")
 style.layout("verde.Treeview", [('Treeview.treearea', {'sticky': 'nswe'})])
 
+style.configure("linha_verde.Treeview", background="#d3f8e2")  # verde clarinho
+style.configure("linha_branca.Treeview", background="#ffffff")  # branco puro
+
 # Calcular coordenadas para centralizar a janela
 pos_x = (largura_tela - largura_janela) // 2
 pos_y = (altura_tela - altura_janela) // 2
@@ -1416,8 +1423,8 @@ tabela_visivel = True
 frame_resumo_especie = ttk.Frame(frame_tabela_container)
 
 colunas_resumo_especie = (
-    "Espécie", "n° Árvores", "Vol/Árvore", "Vol Ajustado",
-    "Vol/Árvore Ajustado", "Vol/ha", "CAP_min"
+    "Espécie", "n° Árvores","Vol", "Vol/Árvore", "Vol_a",
+    "Vol/Árvore_a", "Vol/ha", "CAP_min"
 )
 
 table_resumo_especie = ttk.Treeview(
@@ -1428,7 +1435,7 @@ table_resumo_especie = ttk.Treeview(
 )
 for col in colunas_resumo_especie:
     table_resumo_especie.heading(col, text=col)
-    table_resumo_especie.column(col, width=120, anchor="center")
+    table_resumo_especie.column(col, width=100, anchor="center")
 
 # Scroll
 scroll_resumo_especie = ttk.Scrollbar(frame_resumo_especie, orient="vertical", command=table_resumo_especie.yview)
@@ -1437,6 +1444,10 @@ table_resumo_especie.configure(yscrollcommand=scroll_resumo_especie.set)
 # Packing
 table_resumo_especie.pack(side="left", fill="both", expand=True)
 scroll_resumo_especie.pack(side="right", fill="y")
+
+# Associa as tags ao estilo
+table_resumo_especie.tag_configure("linha_verde", background="#d3f8e2")
+table_resumo_especie.tag_configure("linha_branca", background="#ffffff")
 
 # Frame para o botão de processamento
 
