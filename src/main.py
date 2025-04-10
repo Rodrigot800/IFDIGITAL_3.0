@@ -31,6 +31,7 @@ df_tabelaDeAjusteVol = None
 global df_valores_atualizados
 global  df_saida 
 dados_editados_por_ut = {}
+dados_remanescente = {}
 
 # Flag que indica se a tabela está visível ou não
 tabela_visivel = True
@@ -341,27 +342,22 @@ def ajustarVolumeHect():
 
     # Verifica se o dicionário 'dados_editados_por_ut' existe e não está vazio
     if 'dados_editados_por_ut' in globals() and dados_editados_por_ut:
-        print("Atualizando mCAP e mH a partir de dados_editados_por_ut...")
 
         for idx, row in df_modificado.iterrows():
             ut = str(row["UT"]).strip()
             especie = str(row.get("Nome Vulgar", "")).strip()
 
-            print(f"Verificando UT: {ut}, Espécie: {especie}")
-
             if ut in dados_editados_por_ut and especie in dados_editados_por_ut[ut]:
                 cap = dados_editados_por_ut[ut][especie].get("CAP", "")
                 h = dados_editados_por_ut[ut][especie].get("H", "")
-
-                print(f"Encontrado no dicionário! CAP: {cap}, H: {h}")
 
                 # Atribui os valores se forem válidos (não vazios)
                 if cap != "":
                     df_modificado.at[idx, "mCAP"] = float(cap)
                 if h != "":
                     df_modificado.at[idx, "mH"] = float(h)
-            else:
-                print(" UT ou espécie não encontrada no dicionário.")
+            
+                
 
     
     
@@ -625,59 +621,79 @@ def processar_planilhas(save):
             nome = str(row["Nome Vulgar"]).upper()
             ut = str(row["UT"])
 
+            # Se o nome não estiver no dicionário de parâmetros, retorna a categoria original
             if nome not in parametros:
                 return row["Categoria"]
 
             especie_parametros = parametros[nome]
-            DAPmin = especie_parametros["dap_min"]
+            DAPmin = especie_parametros["dap_min"]  # Valor original de DAPmin
             DAPmax = especie_parametros["dap_max"]
             QF = especie_parametros["qf"]
             alt = especie_parametros["alt"]
 
-            # Verifica se há edições salvas para a UT e espécie
+            # Inicializa o DAPmin para a espécie em UT, caso haja edição
+            DAPminEspUt = DAPmin
+            QFEspUt = QF 
+            # Verifica se há edições salvas para a UT e espécie no dicionário de dados editados
             if ut in dados_editados_por_ut and nome in dados_editados_por_ut[ut]:
                 edits = dados_editados_por_ut[ut][nome]
 
-                # Se REM for "SIM", marca como REMANESCENTE diretamente
+                # Se "REM" for "SIM", marca como REMANESCENTE diretamente
                 if edits.get("REM", "").strip().upper() == "SIM":
                     return "REMANESCENTE"
 
-                # # Substitui DAPmin e QF se estiverem definidos
-                # if "DAP <" in edits:
-                #     try:
-                #         DAPmin = float(edits["DAP <"])
-                #     except ValueError:
-                #         pass
+                # Substitui DAPmin com a edição de "DAP <" se estiver presente
+                if "DAP <" in edits:
+                    try:
+                        DAPminEspUt = float(edits["DAP <"])  # DAPmin agora será o valor de edição específico para a UT
+                    except ValueError:
+                        pass  # Se não for um número válido, mantém o valor original
 
-                # if "QF >=" in edits:
-                #     try:
-                #         QF = int(edits["QF >="])
-                #     except ValueError:
-                #         pass
+                # Se houver edições para QF, substitui o valor de QF
+                if "QF >=" in edits:
+                    try:
+                        QFEspUt = int(edits["QF >="])
+                    except ValueError:
+                        pass  # Se não for um número válido, mantém o valor original
 
             # Protegidas continuam sendo REMANESCENTE
             situacao = str(row.get("Situacao", "")).strip().lower()
             if situacao == "protegida":
                 return "REMANESCENTE"
 
-            # Regras padrão
-            if isinstance(row["DAP"], (float, int)) and (row["DAP"] < DAPmin or row["DAP"] >= DAPmax):
-                return "REMANESCENTE"
+            # Regras de classificação de DAP
+            if isinstance(row["DAP"], (float, int)):
+                if row["DAP"] < DAPmin:
+                    return "REMANESCENTE"  # Se DAP estiver abaixo de DAPminEspUt, é REMANESCENTE
+                elif DAPmin <= row["DAP"] <= DAPminEspUt :
+                    return "SUBSTITUTA"  # Se DAP estiver dentro do intervalo de DAPminEspUt e DAPmax, é SUBSTITUTA
+                elif row["DAP"] >= DAPmax:
+                    return "REMANESCENTE"  # Se DAP for maior ou igual a DAPmax, também classifica como SUBSTITUTA (ou outra categoria se necessário)
+                
+            # Regras de classificação de QF
+            if isinstance(row["QF"], int):
+                if row["QF"] >= QF:
+                    return "REMANESCENTE"
+                elif QF > row["QF"] >= QFEspUt:
+                    return "SUBSTITUTA"  # Se QF for menor que o valor de QF, é SUBSTITUTA
 
-            if isinstance(row["QF"], int) and row["QF"] >= QF:
-                return "REMANESCENTE"
 
+            
+            # Se a altura for maior que o valor de 'alt', marca como REMANESCENTE
             if isinstance(row["H"], (float, int)) and alt > 0 and row["H"] > alt:
                 return "REMANESCENTE"
 
+            # Se nenhuma condição for atendida, retorna a categoria original
             return row["Categoria"]
 
         # Recuperar os parâmetros da tabela
-        parametros_tabela = extrair_parametros_tabela()
+        parametros_tabela = extrair_parametros_tabela()  # Função que recupera os parâmetros definidos
 
         # Aplicando a função ao DataFrame
         df_saida["Categoria"] = df_saida.apply(lambda row: filtrar_REM(row, parametros_tabela), axis=1)
 
+
+        print()
 
         df_saida = pd.merge(
             df_saida,
