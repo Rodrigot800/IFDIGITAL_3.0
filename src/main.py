@@ -1016,12 +1016,10 @@ def abrir_janela_valores_padroes_callback():
 colunas_editaveis = [ "CAP", "H"]
 
 def editar_celula_volume(event):
+    
 
     def editarEspeciesUT(event):
-        def abrir_detalhes_especie(ut, especie):
-            messagebox.showinfo("Espécie clicada", f"Você clicou na espécie '{especie}' da UT '{ut}'")
-            # Aqui você pode abrir outra janela ou chamar outra função com os dados dessa espécie
-
+        
         global dados_editados_por_ut
         item = table_ut_vol.selection()[0]
         ut = table_ut_vol.item(item, "values")[0]
@@ -1063,20 +1061,6 @@ def editar_celula_volume(event):
             tabela.column(col, width=80, anchor="center")
 
         tabela.pack(pady=10, padx=10, fill="x")
-        tabela.bind("<Double-1>", ao_clicar_na_celula)
-
-        def ao_clicar_na_celula(event):
-            region = tabela.identify("region", event.x, event.y)
-            if region == "cell":
-                col = tabela.identify_column(event.x)
-                col_index = int(col.replace("#", "")) - 1  # Remove o "#" e ajusta índice
-
-                if colunas[col_index] == "Nome":  # Se clicou na coluna "Nome"
-                    item_id = tabela.identify_row(event.y)
-                    if item_id:
-                        especie = tabela.item(item_id, "values")[1]  # Índice 1 = coluna "Nome"
-                        abrir_detalhes_especie(ut, especie)
-
 
         # Preenche a tabela com cores alternadas
         for i, row in agrupado.iterrows():
@@ -1101,7 +1085,94 @@ def editar_celula_volume(event):
 
         tabela.tag_configure('verde', background="#e5fbe0")
         tabela.tag_configure('branco', background="#ffffff")
+        # Adiciona o evento de clique duplo (Double Click) na coluna "Nome" (coluna 1)
+        # Adiciona o evento de clique duplo (Double Click) na coluna "Nome" (coluna 2)]
+            # Função que será chamada ao clicar no nome da espécie
+        def ao_clicar_nome(event, ut):
+           # Pega o item selecionado (linha)
+            item = tabela.selection()[0]
+            
+            # Pega o valor da coluna "Nome" (coluna 1)
+            nome = tabela.item(item, "values")[1]  # A coluna "Nome" está na posição 1
 
+            # Aqui você pode chamar qualquer função com o nome e ut selecionados
+            print(f"Clicou no nome: {nome}, UT: {ut}")
+
+            # Filtrar df_saida pela espécie e UT com a categoria "CORTE"
+            df_filtrado = df_saida[
+                (df_saida["Nome Vulgar"] == nome) & 
+                (df_saida["UT"] == int(ut)) & 
+                (df_saida["Categoria"].str.upper() == "CORTE")
+            ]
+
+            # Verifique se o filtro está funcionando
+            print(f"Linhas filtradas para {nome} na UT {ut}:")
+            print(df_filtrado[['Nome Vulgar', 'CAP_a', 'H', 'QF', 'Vol', 'Categoria']])  # Exibe as colunas relevantes
+
+            if df_filtrado.empty:
+                print("Nenhum dado encontrado para esta espécie na UT selecionada.")
+            
+            # Ordenar os dados pela coluna "CAP" em ordem crescente
+            df_filtrado = df_filtrado.sort_values(by="CAP_a", ascending=True)
+
+            # Criar uma nova janela para exibir a tabela
+            nova_janela = tk.Toplevel()
+            nova_janela.title(f"Espécie: {nome} - UT {ut}")
+            nova_janela.geometry("800x600")
+
+            # Caminho para o ícone da janela
+            icone_path = resource_path("src/img/icoGreenFlorest.ico")
+
+            # Define o ícone da aplicação
+            nova_janela.iconbitmap(icone_path)
+
+            # Tabela com as colunas Nome Vulgar, CAP, H, QF, Vol, Categoria
+            tabela_filtrada = ttk.Treeview(nova_janela, columns=("Nome Vulgar", "CAP", "H", "QF", "Vol", "Categoria"),
+                                            show="headings", height=30)
+
+            colunas = ["Nome Vulgar", "CAP", "H", "QF", "Vol", "Categoria"]
+
+            for col in colunas:
+                tabela_filtrada.heading(col, text=col)
+                tabela_filtrada.column(col, width=100, anchor="center")
+
+            # Adicionando a barra de rolagem
+            scrollbar = ttk.Scrollbar(nova_janela, orient="vertical", command=tabela_filtrada.yview)
+            tabela_filtrada.configure(yscrollcommand=scrollbar.set)
+            scrollbar.pack(side="right", fill="y")
+            tabela_filtrada.pack(pady=10, padx=10, fill="x")
+
+            # Alternar entre verde e branco
+            tag = 'verde'
+            
+            # Preenche a tabela com as espécies filtradas
+            for i, row in df_filtrado.iterrows():
+                valores = [
+                    row["Nome Vulgar"],
+                    f"{row['CAP_a']}",
+                    f"{row['H']}",
+                    f"{row['QF']}",
+                    f"{row['Vol']:.3f}",
+                    row["Categoria"]
+                ]
+                
+                # Gerar um iid único para cada linha com base no índice i
+                iid_unico = f"{row['Nome Vulgar']}_{int(ut)}_{i}"  # Combine Nome Vulgar, UT e o índice para garantir unicidade
+                
+                # Alternância de cores, começa com "verde"
+                if tag == 'verde':
+                    tabela_filtrada.insert("", "end", iid=iid_unico, values=valores, tags=("verde",))
+                    tag = 'branco'  # Alterna para "branco"
+                else:
+                    tabela_filtrada.insert("", "end", iid=iid_unico, values=valores, tags=("branco",))
+                    tag = 'verde'  # Alterna para "verde"
+
+            # Define as cores das tags para alternância de linhas
+            tabela_filtrada.tag_configure('verde', background="#e5fbe0")
+            tabela_filtrada.tag_configure('branco', background="#ffffff")
+
+
+        tabela.bind("<Double-1>", lambda event: ao_clicar_nome(event, ut))
         # Área de edição
         frame_edicao = ttk.LabelFrame(nova_janela, text="Editar Espécie Selecionada")
         frame_edicao.pack(fill="x", padx=10, pady=10)
@@ -1385,7 +1456,7 @@ def resource_path(relative_path):
 
 # Criação da janela principal
 app = tk.Tk()
-app.title("IFDIGITAL 3.0")
+app.title("Handroanthus 1.0")
 
 # Caminho para o ícone da janela
 icone_path = resource_path("src/img/icoGreenFlorest.ico")
