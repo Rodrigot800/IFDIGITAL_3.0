@@ -309,7 +309,7 @@ def tabelaDeResumo():
 
 
 def ajustarVolumeHect():
-    global df_tabelaDeAjusteVol, df_valores_atualizados,df_saida
+    global df_tabelaDeAjusteVol, df_valores_atualizados,df_saida, dados_editados_por_ut
     
 
     # Cria uma cópia do DataFrame original para não modificá-lo
@@ -339,6 +339,32 @@ def ajustarVolumeHect():
         if "ut" in df_modificado.columns and "UT" in df_modificado.columns:
             df_modificado.drop(columns=["ut"], inplace=True)
 
+    # Verifica se o dicionário 'dados_editados_por_ut' existe e não está vazio
+    if 'dados_editados_por_ut' in globals() and dados_editados_por_ut:
+        print("Atualizando mCAP e mH a partir de dados_editados_por_ut...")
+
+        for idx, row in df_modificado.iterrows():
+            ut = str(row["UT"]).strip()
+            especie = str(row.get("Nome Vulgar", "")).strip()
+
+            print(f"Verificando UT: {ut}, Espécie: {especie}")
+
+            if ut in dados_editados_por_ut and especie in dados_editados_por_ut[ut]:
+                cap = dados_editados_por_ut[ut][especie].get("CAP", "")
+                h = dados_editados_por_ut[ut][especie].get("H", "")
+
+                print(f"Encontrado no dicionário! CAP: {cap}, H: {h}")
+
+                # Atribui os valores se forem válidos (não vazios)
+                if cap != "":
+                    df_modificado.at[idx, "mCAP"] = float(cap)
+                if h != "":
+                    df_modificado.at[idx, "mH"] = float(h)
+            else:
+                print(" UT ou espécie não encontrada no dicionário.")
+
+    
+    
 
     df_modificado["ut"] = df_modificado["UT"]
     df_modificado["hac"] = df_modificado["UT_AREA_HA"]
@@ -612,22 +638,22 @@ def processar_planilhas(save):
             if ut in dados_editados_por_ut and nome in dados_editados_por_ut[ut]:
                 edits = dados_editados_por_ut[ut][nome]
 
-                # Se F_REM for "SIM", marca como REMANESCENTE diretamente
-                if edits.get("F_REM", "").strip().upper() == "SIM":
+                # Se REM for "SIM", marca como REMANESCENTE diretamente
+                if edits.get("REM", "").strip().upper() == "SIM":
                     return "REMANESCENTE"
 
-                # Substitui DAPmin e QF se estiverem definidos
-                if "DAP <" in edits:
-                    try:
-                        DAPmin = float(edits["DAP <"])
-                    except ValueError:
-                        pass
+                # # Substitui DAPmin e QF se estiverem definidos
+                # if "DAP <" in edits:
+                #     try:
+                #         DAPmin = float(edits["DAP <"])
+                #     except ValueError:
+                #         pass
 
-                if "QF >=" in edits:
-                    try:
-                        QF = int(edits["QF >="])
-                    except ValueError:
-                        pass
+                # if "QF >=" in edits:
+                #     try:
+                #         QF = int(edits["QF >="])
+                #     except ValueError:
+                #         pass
 
             # Protegidas continuam sendo REMANESCENTE
             situacao = str(row.get("Situacao", "")).strip().lower()
@@ -952,13 +978,13 @@ def editar_celula_volume(event):
         nova_janela.geometry("1050x700")
 
 
-        tabela = ttk.Treeview(nova_janela, columns=("Nome", "n° Árvores", "Volume Total", "Vol/ha", "DAP <", "QF >=", "F_REM"),
+        tabela = ttk.Treeview(nova_janela, columns=("Nome", "n° Árvores", "Volume Total", "Vol/ha", "DAP <", "QF >=","CAP","H", "REM"),
                             show="headings", height=20, style="verde.Treeview")
 
-        colunas = ("Nome", "n° Árvores", "Volume Total", "Vol/ha", "DAP <", "QF >=", "F_REM")
+        colunas = ("Nome", "n° Árvores", "Volume Total", "Vol/ha", "DAP <", "QF >=","CAP","H", "REM")
         for col in colunas:
             tabela.heading(col, text=col)
-            tabela.column(col, width=140, anchor="center")
+            tabela.column(col, width=110, anchor="center")
 
         tabela.pack(pady=10, padx=10, fill="x")
 
@@ -974,7 +1000,9 @@ def editar_celula_volume(event):
                 f"{row['vol_por_ha']:.2f}",
                 dados_salvos.get("DAP <", ""),
                 dados_salvos.get("QF >=", ""),
-                dados_salvos.get("F_REM", "NÃO")
+                dados_salvos.get("CAP", ""),
+                dados_salvos.get("H", ""),
+                dados_salvos.get("REM", "NÃO")
             ]
 
             tag = 'verde' if i % 2 == 0 else 'branco'
@@ -990,7 +1018,7 @@ def editar_celula_volume(event):
         entradas = {}
         for i, campo in enumerate(colunas[4:]):
             ttk.Label(frame_edicao, text=campo).grid(row=0, column=i, padx=5)
-            if campo == "F_REM":
+            if campo == "REM":
                 combo = ttk.Combobox(frame_edicao, values=["SIM","NÃO"], state="readonly", width=10)
                 combo.grid(row=1, column=i, padx=5)
                 entradas[campo] = combo

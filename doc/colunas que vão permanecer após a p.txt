@@ -9,3 +9,18 @@ Folha	Secção	UT	Faixa	Placa	Cod.	Nome Vulgar	CAP	ALT	QF	X	Y	X Corrigido	Y Corr
 
 as que saíram :
 Folha  Secção Cod.  X Corrigido  Y Corrigido X Negativo Y Negativo
+
+pyinstaller --windowed \
+--icon="C:/Users/Rodrigo Peixoto/Downloads/icone ifdigital.ico" \
+--hidden-import=openpyxl \
+--hidden-import=pandas \
+--hidden-import=tkinter \
+--hidden-import=configparser \
+--hidden-import=numpy \
+--hidden-import=xlsxwriter \
+--collect-all openpyxl \
+--collect-all pandas \
+--collect-all numpy \
+--collect-all xlsxwriter \
+--add-data "img:img" \
+main.py -y
