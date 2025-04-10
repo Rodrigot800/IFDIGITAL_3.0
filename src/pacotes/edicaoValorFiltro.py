@@ -1,11 +1,24 @@
 import tkinter as tk
 import configparser
+import os
+import sys
 
 # Variáveis globais para os valores (inicializadas como None)
 valor1 = None
 valor2 = None
 valor3 = None
 valor4 = None
+
+
+# Função para garantir o caminho correto tanto no executável quanto no script de desenvolvimento
+def resource_path(relative_path):
+    """ Garante o caminho certo tanto no executável quanto em desenvolvimento """
+    try:
+        base_path = sys._MEIPASS  # Caso o script esteja executando como .exe (PyInstaller)
+    except Exception:
+        base_path = os.path.abspath(".")  # Caso esteja executando como script
+
+    return os.path.join(base_path, relative_path)
 
 # Função para carregar os valores do arquivo de configuração
 def carregar_valores():
@@ -62,6 +75,10 @@ def abrir_janela_valores_padroes(root):
     janela_padrao.transient(root)
     janela_padrao.grab_set()
 
+    # Caminho para o ícone da janela
+    icone_path = resource_path("img/icoGreenFlorest.ico")
+    janela_padrao.iconbitmap(icone_path)
+
     # Frame para os inputs principais
     frame_inputs = tk.Frame(janela_padrao)
     frame_inputs.pack(pady=10, fill='both', expand=True)
@@ -79,7 +96,7 @@ def abrir_janela_valores_padroes(root):
     input_valor2.pack(pady=5)
 
     # Input para QF
-    tk.Label(frame_inputs, text="QF :", font=("Arial", 11)).pack(pady=5)
+    tk.Label(frame_inputs, text="QF >= :", font=("Arial", 11)).pack(pady=5)
     input_valor3 = tk.Entry(frame_inputs, font=("Arial", 11))
     input_valor3.insert(0, valor3)
     input_valor3.pack(pady=5)

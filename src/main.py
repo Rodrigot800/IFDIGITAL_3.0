@@ -28,8 +28,13 @@ start_total = None
 ordering_mode = "QF > Vol"
 
 df_tabelaDeAjusteVol = None
-global df_valores_atualizados
-global  df_saida 
+global df_valores_atualizados 
+global  df_saida  
+# Inicializando o df_resumo globalmente como DataFrame vazio
+df_resumo = pd.DataFrame(columns=[
+    "CAPmin", "Espécie", "n° Árvores", "Vol", "Vol/Árvore", 
+    "Volume_a", "Vol_a/Árvore", "Vol/Hect"
+])
 dados_editados_por_ut = {}
 dados_remanescente = {}
 
@@ -208,6 +213,11 @@ def editar_linha(event):
 
     popup = tk.Toplevel(app)
     popup.title("Editar Linha")
+    # Caminho para o ícone da janela
+    icone_path = resource_path("img/icoGreenFlorest.ico")
+
+    # Define o ícone da aplicação
+    popup.iconbitmap(icone_path)
 
     ttk.Label(popup, text="Nome da Espécie:").grid(row=0, column=0, padx=5, pady=5)
     ttk.Label(popup, text=valores[0], font=("Arial", 10, "bold")).grid(row=0, column=1, padx=5, pady=5)
@@ -269,6 +279,8 @@ def limpar_lista_selecionados():
     table_selecionados.delete(*table_selecionados.get_children())
 
 def tabelaDeResumo():
+    global df_resumo
+
     # Limpa a tabela antes de preencher de novo
     for item in table_resumo_especie.get_children():
         table_resumo_especie.delete(item)
@@ -293,20 +305,25 @@ def tabelaDeResumo():
 
         cap_min = grupo["CAP_a"].min()
 
+        # Cria uma tupla com os valores calculados
         valores = (
+            round(cap_min, 2),
             especie,
             qtd_arvores,
             round(soma_vol, 2),
             round(vol_por_arvore, 2),
             round(soma_vol_a, 2),
             round(vol_a_por_arvore, 2),
-            round(vol_ha, 2),
-            round(cap_min, 2)
+            round(vol_ha, 2)
         )
 
         # Alterna entre tags
         tag = "linha_verde" if i % 2 == 0 else "linha_branca"
         table_resumo_especie.insert("", "end", values=valores, tags=(tag,))
+
+        # Adiciona os valores à lista de dados_resumo
+        df_resumo = pd.concat([df_resumo, pd.DataFrame([valores], columns=df_resumo.columns)], ignore_index=True)
+
 
 
 def ajustarVolumeHect():
@@ -362,8 +379,8 @@ def ajustarVolumeHect():
     
     
 
-    df_modificado["ut"] = df_modificado["UT"]
-    df_modificado["hac"] = df_modificado["UT_AREA_HA"]
+    df_modificado["UT"] = df_modificado["UT"]
+    df_modificado["Hectares"] = df_modificado["UT_AREA_HA"]
 
     # Calculando a coluna 'H_a' dependendo da condição de 'Categoria'
     df_modificado["H_a"] = df_modificado.apply(
@@ -417,55 +434,59 @@ def ajustarVolumeHect():
 
     if df_filtrado.empty:
         print("Nenhuma árvore foi categorizada como 'CORTE'.")
-        df_tabelaDeAjusteVol = df_modificado[["ut", "hac", "mCAP", "mH", "DAP_a"]].drop_duplicates()
-        df_tabelaDeAjusteVol["num_arvores"] = 0
-        df_tabelaDeAjusteVol["volume_total"] = 0
+        df_tabelaDeAjusteVol = df_modificado[["UT", "Hectares", "mCAP", "mH", "DAP_a"]].drop_duplicates()
+        df_tabelaDeAjusteVol["n_Árvores"] = 0
+        df_tabelaDeAjusteVol["Vol"] = 0
         df_tabelaDeAjusteVol["diminuir"] = 0
         df_tabelaDeAjusteVol["aumentar"] = 0
         df_tabelaDeAjusteVol["media_dif_dap"] = 0
     else:
         # Agrupa para somar DAP e DAP_a por UT
-        df_soma_dap = df_filtrado.groupby("ut")[["DAP", "DAP_a"]].sum().reset_index()
+        df_soma_dap = df_filtrado.groupby("UT")[["DAP", "DAP_a"]].sum().reset_index()
 
         # Calcula a diferença percentual entre DAP_a e DAP
-        df_soma_dap["dif_pct"] = ((df_soma_dap["DAP_a"] - df_soma_dap["DAP"]) / df_soma_dap["DAP"]) * 100
+        df_soma_dap["DAP %"] = ((df_soma_dap["DAP_a"] - df_soma_dap["DAP"]) / df_soma_dap["DAP"]) * 100
 
         # Agrupa para contar o número de árvores e somar o volume total por UT
-        contagem_arvores = df_filtrado.groupby("ut").size().reset_index(name="num_arvores")
-        volume_total_por_ut = df_filtrado.groupby("ut")["Vol_a"].sum().reset_index()
-        volume_total_por_ut.rename(columns={"Vol_a": "volume_total"}, inplace=True)
+        contagem_arvores = df_filtrado.groupby("UT").size().reset_index(name="n_Árvores")
+        volume_total_por_ut = df_filtrado.groupby("UT")["Vol_a"].sum().reset_index()
+        volume_total_por_ut.rename(columns={"Vol_a": "Vol"}, inplace=True)
         
         # Cria o DataFrame de ajuste com UT, Hectares, mCAP e mH
-        df_tabelaDeAjusteVol = df_modificado[["ut", "hac", "mCAP", "mH", "DAP_a"]].drop_duplicates()
+        df_tabelaDeAjusteVol = df_modificado[["UT", "Hectares", "mCAP", "mH", "DAP_a"]].drop_duplicates()
         print("Dados iniciais de UT, Hectares, mCAP, mH e DAP_a:")
         print(df_tabelaDeAjusteVol)
 
         # Calcula o volume máximo como (hectares * 30)
-        df_tabelaDeAjusteVol["volume_max"] = df_tabelaDeAjusteVol["hac"] * 30
+        df_tabelaDeAjusteVol["Vol_Max"] = df_tabelaDeAjusteVol["Hectares"] * 30
 
         # Faz merge para incorporar a contagem de árvores, o volume total e a diferença percentual
-        df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.merge(contagem_arvores, on="ut", how="left").fillna(0)
-        df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.merge(volume_total_por_ut, on="ut", how="left").fillna(0)
-        df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.merge(df_soma_dap[["ut", "dif_pct"]], on="ut", how="left").fillna(0)
+        df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.merge(contagem_arvores, on="UT", how="left").fillna(0)
+        df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.merge(volume_total_por_ut, on="UT", how="left").fillna(0)
+        df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.merge(df_soma_dap[["UT", "DAP %"]], on="UT", how="left").fillna(0)
 
         # Calcula o volume por hectare (V³/ha)
-        df_tabelaDeAjusteVol["volume_por_hectare"] = df_tabelaDeAjusteVol.apply(
-            lambda row: row["volume_total"] / row["hac"] if row["hac"] > 0 else 0, axis=1
+        df_tabelaDeAjusteVol["Vol/Hect"] = df_tabelaDeAjusteVol.apply(
+            lambda row: row["Vol"] / row["Hectares"] if row["Hectares"] > 0 else 0, axis=1
         )
         
         # Calcula as diferenças para "diminuir" e "aumentar"
         df_tabelaDeAjusteVol["diminuir"] = df_tabelaDeAjusteVol.apply(
-            lambda row: row["volume_total"] - row["volume_max"] if row["volume_total"] > row["volume_max"] else 0, axis=1
+            lambda row: row["Vol"] - row["Vol_Max"] if row["Vol"] > row["Vol_Max"] else 0, axis=1
         )
         df_tabelaDeAjusteVol["aumentar"] = df_tabelaDeAjusteVol.apply(
-            lambda row: row["volume_max"] - row["volume_total"] if row["volume_total"] < row["volume_max"] else 0, axis=1
+            lambda row: row["Vol_Max"] - row["Vol"] if row["Vol"] < row["Vol_Max"] else 0, axis=1
         )
 
         # Remover duplicatas por UT após os merges
-        df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.drop_duplicates(subset=["ut"])
+        df_tabelaDeAjusteVol = df_tabelaDeAjusteVol.drop_duplicates(subset=["UT"])
 
-    df_tabelaDeAjusteVol["num_arvores"] = df_tabelaDeAjusteVol["num_arvores"].astype(int)
+    df_tabelaDeAjusteVol["n_Árvores"] = df_tabelaDeAjusteVol["n_Árvores"].astype(int)
+    # Imprime os nomes das colunas de df_tabelaDeAjusteVol
+    print(df_tabelaDeAjusteVol.columns.tolist())
 
+    for col in df_tabelaDeAjusteVol.columns:
+        print(col)
    # Definir as tags para alternar entre as cores
     table_ut_vol.tag_configure('branca', background='white')  # Cor para as linhas brancas
     table_ut_vol.tag_configure('verde_claro', background='#d3f8e2')  # Cor para as linhas verde claro
@@ -477,15 +498,15 @@ def ajustarVolumeHect():
     # Insere os valores na Treeview table_ut_vol com alternância de cores
     for i, (_, row) in enumerate(df_tabelaDeAjusteVol.iterrows()):
         # Formatando os valores para exibição
-        ut_val = f"{row['ut']:.0f}"
-        hectares_val = f"{row['hac']:.5f}"
-        num_arvores = f"{row['num_arvores']:.0f}"
-        volume_total = f"{row['volume_total']:.5f}"
-        volume_max = f"{row['volume_max']:.5f}"
-        volume_por_hect = f"{row['volume_por_hectare']:.3f}"
+        ut_val = f"{row['UT']:.0f}"
+        hectares_val = f"{row['Hectares']:.5f}"
+        n_Árvores = f"{row['n_Árvores']:.0f}"
+        Vol = f"{row['Vol']:.5f}"
+        Vol_Max = f"{row['Vol_Max']:.5f}"
+        volume_por_hect = f"{row['Vol/Hect']:.3f}"
         diminuir_val = f"{row['diminuir']:.3f}"
         aumentar_val = f"{row['aumentar']:.3f}"
-        dif_pct_val = f"{row['dif_pct']:.2f}"  # Exibe a diferença percentual
+        dif_pct_val = f"{row['DAP %']:.2f}"  # Exibe a diferença percentual
         CAP_val = f"{row['mCAP']:.3f}"
         ALT_val = f"{row['mH']:.2f}"
 
@@ -493,8 +514,8 @@ def ajustarVolumeHect():
         tag = 'verde_claro' if i % 2 == 0 else 'branca'
         
         # Insere os dados na Treeview com a tag de cor
-        table_ut_vol.insert("", "end", values=(ut_val, hectares_val, num_arvores,
-                                                volume_total, volume_max, diminuir_val,
+        table_ut_vol.insert("", "end", values=(ut_val, hectares_val, n_Árvores,
+                                                Vol, Vol_Max, diminuir_val,
                                                 aumentar_val, volume_por_hect,
                                                 dif_pct_val, CAP_val, ALT_val), tags=(tag,))
 
@@ -838,15 +859,14 @@ def processar_planilhas(save):
         # Resetar índice após atualização
         df_saida.reset_index(inplace=True)
 
-        ####
+    
         # **Contar a quantidade de árvores "CORTE" por UT e Nome Vulgar**
-        df_contagem_corte = df_saida[df_saida["Categoria"] == "CORTE"].groupby(["UT", "Nome Vulgar"], as_index=False).size()
-        df_contagem_corte.rename(columns={"size": "Qtd_Corte"}, inplace=True)
+        df_contagem_corte = df_saida[df_saida["Categoria"] == "CORTE"].groupby(["UT", "Nome Vulgar"]).size().reset_index(name="Qtd_Corte")
 
         # **Mesclar com a contagem de cortes para verificar onde não há mais cortes**
-        df_verificacao = df_substituta.merge(df_contagem_corte, on=["UT", "Nome Vulgar"], how="left").fillna(0)
+        df_verificacao = df_saida[df_saida["Categoria"] == "SUBSTITUTA"].merge(df_contagem_corte, on=["UT", "Nome Vulgar"], how="left").fillna(0)
 
-        # **Criar um identificador para marcar onde NÃO EXISTE "CORTE"**
+        # **Criar um identificador para marcar onde NÃO EXISTE "CORTE" (quando Qtd_Corte == 0)**
         df_verificacao["Marcar_REM"] = df_verificacao["Qtd_Corte"] == 0
 
         # **Criar uma lista de tuplas (UT, Nome Vulgar) onde as substitutas precisam virar REMANESCENTE**
@@ -857,6 +877,15 @@ def processar_planilhas(save):
             lambda row: "REMANESCENTE" if (row["UT"], row["Nome Vulgar"]) in remover_tuplas and row["Categoria"] == "SUBSTITUTA" else row["Categoria"],
             axis=1
         )
+
+        
+        # **Verificando a contagem de cada categoria após a atualização**
+        print("Contagem por Categoria após atualização:")
+        print(df_saida["Categoria"].value_counts())
+
+        # Exibindo a quantidade de "REMANESCENTE" e "SUBSTITUTA" para conferirmos o efeito
+        print(df_saida[df_saida["Categoria"] == "REMANESCENTE"].shape[0], "REMANESCENTES")
+        print(df_saida[df_saida["Categoria"] == "SUBSTITUTA"].shape[0], "SUBSTITUTAS")
 
         # **Verificar os resultados corrigidos**
         print("\n--- Linhas que viraram REMANESCENTE porque não há mais CORTE dentro da UT ---")
@@ -895,12 +924,30 @@ def processar_planilhas(save):
             print(df_saida)
             if save == True :
                 # Exporta para Excel usando o df_modificado com os cálculos originais
-                df_export = df_saida[["UT", "Faixa", "Placa", "Nome Vulgar", "CAP", "CAP_a", "mCAP", "H", "H_a", "mH", "QF",
-                                        "X", "Y", "DAP", "DAP_a", "Vol", "Vol_a","Lat", "Long", "DM", "OBS",
-                                        "Categoria", "Situacao"]]
+                # Exemplo de DataFrame a ser exportado
+                df_export_planilha_principal = df_saida[["UT", "Faixa", "Placa", "Nome Vulgar", "CAP", "CAP_a", "mCAP", "H", "H_a", "mH", "QF",
+                                    "X", "Y", "DAP", "DAP_a", "Vol", "Vol_a", "Lat", "Long", "DM", "OBS", "Categoria", "Situacao"]]
+                
+                df_export_tabela_de_ajuste = df_tabelaDeAjusteVol[['UT', 'Hectares', 'n_Árvores', 'Vol', 'Vol_Max', 'diminuir', 'aumentar', 'Vol/Hect', 'DAP %',  'mCAP', 'mH']]
+
+                df_export_resumo = df_resumo[[
+                                    "CAPmin", "Espécie", "n° Árvores", "Vol", "Vol/Árvore", 
+                                    "Volume_a", "Vol_a/Árvore", "Vol/Hect"
+                                ]]
+
+                # Diretório onde o arquivo será salvo (exemplo)
                 diretorio = os.path.dirname(entrada1_var.get())
-                arquivo_saida = os.path.join(diretorio, "Planilha Processada - IFDIGITAL 3.0.xlsx")
-                df_export.to_excel(arquivo_saida, index=False, engine="xlsxwriter")
+                arquivo_saida = os.path.join(diretorio, "Planilha Processada - Handroanthus 1.0.xlsx")
+
+                # Usando ExcelWriter para salvar o DataFrame em múltiplas abas
+                with pd.ExcelWriter(arquivo_saida, engine='xlsxwriter') as writer:
+                    # Escreve o DataFrame na aba "Inventário Processado"
+                    df_export_planilha_principal.to_excel(writer, sheet_name='Inventário Processado', index=False)
+                    
+                    # Escreve o DataFrame novamente na aba "ATabela de Ediçãoa"
+                    df_export_tabela_de_ajuste.to_excel(writer, sheet_name='Edição', index=False)
+
+                    df_export_resumo.to_excel(writer, sheet_name="Resumo",  index=False)
                 finalTimeSalvar = time.time()
 
                 # finalizando barra de progresso
@@ -984,14 +1031,20 @@ def editar_celula_volume(event):
         ]
 
         agrupado = df_filtrado.groupby("Nome Vulgar").agg(
-            num_arvores=('Nome Vulgar', 'count'),
-            volume_total=('Vol_a', 'sum'),
+            n_Árvores=('Nome Vulgar', 'count'),
+            Vol=('Vol_a', 'sum'),
         ).reset_index()
-        agrupado["vol_por_ha"] = agrupado["volume_total"] / hectares
+        agrupado["vol_por_ha"] = agrupado["Vol"] / hectares
 
         nova_janela = tk.Toplevel()
         nova_janela.title(f"Espécies da UT {ut}")
-        nova_janela.geometry("1050x700")
+        nova_janela.geometry("800x700")
+
+        # Caminho para o ícone da janela
+        icone_path = resource_path("img/icoGreenFlorest.ico")
+
+        # Define o ícone da aplicação
+        nova_janela.iconbitmap(icone_path)
 
 
         tabela = ttk.Treeview(nova_janela, columns=("Nome", "n° Árvores", "Volume Total", "Vol/ha", "DAP <", "QF >=","CAP","H", "REM"),
@@ -1000,7 +1053,7 @@ def editar_celula_volume(event):
         colunas = ("Nome", "n° Árvores", "Volume Total", "Vol/ha", "DAP <", "QF >=","CAP","H", "REM")
         for col in colunas:
             tabela.heading(col, text=col)
-            tabela.column(col, width=110, anchor="center")
+            tabela.column(col, width=80, anchor="center")
 
         tabela.pack(pady=10, padx=10, fill="x")
 
@@ -1011,8 +1064,8 @@ def editar_celula_volume(event):
 
             valores = [
                 nome,
-                row["num_arvores"],
-                f"{row['volume_total']:.2f}",
+                row["n_Árvores"],
+                f"{row['Vol']:.2f}",
                 f"{row['vol_por_ha']:.2f}",
                 dados_salvos.get("DAP <", ""),
                 dados_salvos.get("QF >=", ""),
@@ -1031,18 +1084,56 @@ def editar_celula_volume(event):
         frame_edicao = ttk.LabelFrame(nova_janela, text="Editar Espécie Selecionada")
         frame_edicao.pack(fill="x", padx=10, pady=10)
 
-        entradas = {}
-        for i, campo in enumerate(colunas[4:]):
-            ttk.Label(frame_edicao, text=campo).grid(row=0, column=i, padx=5)
-            if campo == "REM":
-                combo = ttk.Combobox(frame_edicao, values=["SIM","NÃO"], state="readonly", width=10)
-                combo.grid(row=1, column=i, padx=5)
-                entradas[campo] = combo
-            else:
-                entry = ttk.Entry(frame_edicao, width=10)
-                entry.grid(row=1, column=i, padx=5)
-                entradas[campo] = entry
+        # Criar 3 frames dentro de frame_edicao
+        frame_substituta = ttk.Frame(frame_edicao)
+        frame_substituta.grid(row=0, column=0, padx=10, pady=10)
 
+        frame_ajustes = ttk.Frame(frame_edicao)
+        frame_ajustes.grid(row=0, column=1, padx=10, pady=10)
+
+        frame_remanescente = ttk.Frame(frame_edicao)
+        frame_remanescente.grid(row=0, column=2, padx=10, pady=10)
+
+        # Nomeando os frames
+        ttk.Label(frame_substituta, text="Substituta :").grid(row=0, column=0, pady=5, sticky="w")
+        ttk.Label(frame_ajustes, text="Ajuste :").grid(row=0, column=0, pady=5, sticky="w")
+        ttk.Label(frame_remanescente, text="Remanescente :").grid(row=0, column=0, pady=5, sticky="w")
+
+        # Dicionário para armazenar os widgets
+        entradas = {}
+
+        # Preencher o primeiro frame (Editar Substituta)
+        for i, campo in enumerate(["DAP <", "QF >="]):  # A primeira lista de campos
+            ttk.Label(frame_substituta, text=campo).grid(row=i+1, column=0, padx=5, pady=5, sticky="w")
+            entry = ttk.Entry(frame_substituta, width=10)
+            entry.grid(row=i+1, column=1, padx=5, pady=5)
+            entradas[campo] = entry
+
+        # Preencher o segundo frame (Editar Ajustes)
+        for i, campo in enumerate(["CAP", "H"]):  # Outra lista de campos
+            ttk.Label(frame_ajustes, text=campo).grid(row=i+1, column=0, padx=5, pady=5, sticky="w")
+            entry = ttk.Entry(frame_ajustes, width=10)
+            entry.grid(row=i+1, column=1, padx=5, pady=5)
+            entradas[campo] = entry
+
+        # Preencher o terceiro frame (REMANESCENTE)
+        for i, campo in enumerate(["REM"]):  # Lista com apenas "REM"
+            ttk.Label(frame_remanescente, text=campo).grid(row=i+1, column=0, padx=5, pady=5, sticky="w")
+            combo = ttk.Combobox(frame_remanescente, values=["SIM", "NÃO"], state="readonly", width=10)
+            combo.grid(row=i+1, column=1, padx=5, pady=5)
+            entradas[campo] = combo
+
+        # Alinhar todos os frames (substituta, ajustes, remanescente) de forma que fiquem com o mesmo tamanho e alinhados.
+        frame_edicao.grid_columnconfigure(0, weight=1)
+        frame_edicao.grid_columnconfigure(1, weight=1)
+        frame_edicao.grid_columnconfigure(2, weight=1)
+
+        # Ajustar alinhamento horizontal de "REM" com os outros campos
+        frame_remanescente.grid_rowconfigure(0, weight=1)
+        frame_remanescente.grid_rowconfigure(1, weight=1)
+
+
+        
         especie_selecionada = tk.StringVar()
 
         def ao_selecionar_linha(event):
@@ -1251,12 +1342,12 @@ def alternar_tabela():
     if tabela_visivel:
         frame_tabela2.pack_forget()
         frame_resumo_especie.pack(fill="both", expand=True)
-        botao_trocar_tabela.config(text="Exibir Tabela de Edição")
+        botao_trocar_tabela.config(text="Exibir Edição")
         tabela_visivel = False
     else:
         frame_resumo_especie.pack_forget()
         frame_tabela2.pack(fill="both", expand=True)
-        botao_trocar_tabela.config(text="Exibir Tabela resumo")
+        botao_trocar_tabela.config(text="Exibir Resumo")
         tabela_visivel = True
 
 
@@ -1275,7 +1366,7 @@ app = tk.Tk()
 app.title("IFDIGITAL 3.0")
 
 # Caminho para o ícone da janela
-icone_path = resource_path("src/img/icone ifdigital.ico")
+icone_path = resource_path("img/icoGreenFlorest.ico")
 
 # Define o ícone da aplicação
 app.iconbitmap(icone_path)
@@ -1350,7 +1441,7 @@ frame_lado_a_lado.place(x=30, y=125)
 # Botão para modificar a filtragem para REM
 botao_modificar_filtro = ttk.Button(
     frame_lado_a_lado,
-    text="Modificar Filtragem para REM",
+    text="Modificar Remanescente",
     command=abrir_janela_valores_padroes_callback
 )
 botao_modificar_filtro.pack(side=tk.LEFT, padx=50)
@@ -1378,7 +1469,7 @@ combobox.pack(side=tk.LEFT, padx=10)
 # Novo botão para alternar entre a tabela de ajustes e a de resumo
 botao_trocar_tabela = ttk.Button(
     frame_lado_a_lado,
-    text="Mostrar Tabela de Resumo",  # ou "Mostrar Tabela de Ajustes" dependendo do estado atual
+    text="Exibir Resumo",  # ou "Mostrar Tabela de Ajustes" dependendo do estado atual
     command=alternar_tabela
 )
 botao_trocar_tabela.pack(side=tk.RIGHT, padx=(0))
@@ -1412,7 +1503,7 @@ pesquisa_entry.pack(side="left", padx=5)
 # Vinculando evento de pesquisa
 pesquisa_entry.bind("<KeyRelease>", pesquisar_nomes)
 
-colunas_selecionados = ("Nome", "DAP <", "DAP >=", "QF = ", "H >")
+colunas_selecionados = ("Nome", "DAP <", "DAP >=", "QF >= ", "H >")
 
 # Cria a Treeview
 table_selecionados = ttk.Treeview(
@@ -1482,8 +1573,8 @@ tabela_visivel = True
 frame_resumo_especie = ttk.Frame(frame_tabela_container)
 
 colunas_resumo_especie = (
-    "Espécie", "n° Árvores","Vol", "Vol/Árvore", "Vol_a",
-    "Vol/Árvore_a", "Vol/ha", "CAP_min"
+    "CAP_min","Espécie", "n° Árvores","Vol", "Vol/Árvore", "Vol_a",
+    "Vol/Árvore_a", "Vol/ha"
 )
 
 table_resumo_especie = ttk.Treeview(
