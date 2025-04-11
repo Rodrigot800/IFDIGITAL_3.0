@@ -12,6 +12,7 @@ import configparser
 import numpy as np
 from PIL import Image, ImageTk
 from tkinter import PhotoImage
+import math
 
 
 config = configparser.ConfigParser()
@@ -663,9 +664,11 @@ def processar_planilhas(save):
                     return "REMANESCENTE"
 
                 # Substitui DAPmin com a edição de "DAP <" se estiver presente
-                if "DAP <" in edits:
+                if "CAP <" in edits:
                     try:
-                        DAPminEspUt = float(edits["DAP <"])  # DAPmin agora será o valor de edição específico para a UT
+                        DAPminEspUt = (float(edits["CAP <"]) / math.pi ) / 100  # DAPmin agora será o valor de edição específico para a UT
+                        print("valor de  DAPminEspU")
+                        print(DAPminEspUt)
                     except ValueError:
                         pass  # Se não for um número válido, mantém o valor original
 
@@ -1051,10 +1054,10 @@ def editar_celula_volume(event):
         nova_janela.iconbitmap(icone_path)
 
 
-        tabela = ttk.Treeview(nova_janela, columns=("CAPmin", "Nome", "n° Árvores", "Volume Total", "Vol/ha", "DAP <", "QF >=","CAP","H", "REM"),
+        tabela = ttk.Treeview(nova_janela, columns=("CAPmin", "Nome", "n° Árvores", "Volume Total", "Vol/ha", "CAP <", "QF >=","CAP","H", "REM"),
                       show="headings", height=20, style="verde.Treeview")
 
-        colunas = ("CAPmin", "Nome", "n° Árvores", "Volume Total", "Vol/ha", "DAP <", "QF >=","CAP","H", "REM")
+        colunas = ("CAPmin", "Nome", "n° Árvores", "Volume Total", "Vol/ha", "CAP <", "QF >=","CAP","H", "REM")
 
         for col in colunas:
             tabela.heading(col, text=col)
@@ -1073,7 +1076,7 @@ def editar_celula_volume(event):
                 row["n_Árvores"],
                 f"{row['Vol']:.2f}",
                 f"{row['vol_por_ha']:.2f}",
-                dados_salvos.get("DAP <", ""),
+                dados_salvos.get("CAP <", ""),
                 dados_salvos.get("QF >=", ""),
                 dados_salvos.get("CAP", ""),
                 dados_salvos.get("H", ""),
@@ -1196,7 +1199,7 @@ def editar_celula_volume(event):
         entradas = {}
 
         # Preencher o primeiro frame (Editar Substituta)
-        for i, campo in enumerate(["DAP <", "QF >="]):  # A primeira lista de campos
+        for i, campo in enumerate(["CAP <", "QF >="]):  # A primeira lista de campos
             ttk.Label(frame_substituta, text=campo).grid(row=i+1, column=0, padx=5, pady=5, sticky="w")
             entry = ttk.Entry(frame_substituta, width=10)
             entry.grid(row=i+1, column=1, padx=5, pady=5)
