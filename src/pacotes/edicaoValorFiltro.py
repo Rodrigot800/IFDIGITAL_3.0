@@ -76,7 +76,7 @@ def abrir_janela_valores_padroes(root):
     janela_padrao.grab_set()
 
     # Caminho para o ícone da janela
-    icone_path = resource_path("src/img/icoGreenFlorest.ico")
+    icone_path = resource_path("img/icoGreenFlorest.ico")
     janela_padrao.iconbitmap(icone_path)
 
     # Frame para os inputs principais

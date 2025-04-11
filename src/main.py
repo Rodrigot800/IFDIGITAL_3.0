@@ -214,7 +214,7 @@ def editar_linha(event):
     popup = tk.Toplevel(app)
     popup.title("Editar Linha")
     # Caminho para o ícone da janela
-    icone_path = resource_path("src/img/icoGreenFlorest.ico")
+    icone_path = resource_path("img/icoGreenFlorest.ico")
 
     # Define o ícone da aplicação
     popup.iconbitmap(icone_path)
@@ -327,12 +327,10 @@ def tabelaDeResumo():
         # Adiciona os valores à lista de dados_resumo
         df_resumo = pd.concat([df_resumo, pd.DataFrame([valores], columns=df_resumo.columns)], ignore_index=True)
 
-
-
-def ajustarVolumeHect():
-    global df_tabelaDeAjusteVol, df_valores_atualizados,df_saida, dados_editados_por_ut
     
+def definir_e_recuperarValoresPara_mCAP_e_mH():
 
+    global df_tabelaDeAjusteVol, df_valores_atualizados,df_saida, dados_editados_por_ut
     # Cria uma cópia do DataFrame original para não modificá-lo
     df_modificado = df_saida.copy()
 
@@ -340,26 +338,32 @@ def ajustarVolumeHect():
     df_modificado["mCAP"] = 1
     df_modificado["mH"] = 0
 
+    # Verifica se o DataFrame de valores atualizados existe e não está vazio
     if 'df_valores_atualizados' in globals() and not df_valores_atualizados.empty:
         for col in ["mCAP", "mH"]:
             # Buscar os valores originais com base no novo nome
             nome_origem = col[1:]  # remove o 'm' do início
             df_valores_atualizados[col] = df_valores_atualizados.get(nome_origem, df_valores_atualizados.get(col))
-        
+
+        # Realiza o merge entre os DataFrames df_modificado e df_valores_atualizados
         df_modificado = df_modificado.merge(
             df_valores_atualizados[["ut", "mCAP", "mH"]],
             left_on="UT", right_on="ut", how="left", suffixes=("", "_novo")
         )
+
+        # Atualiza os valores de mCAP e mH com os valores de df_valores_atualizados, caso existam
         for col in ["mCAP", "mH"]:
             if f"{col}_novo" in df_modificado.columns:
                 novo_val = df_modificado[f"{col}_novo"]
                 df_modificado[col] = np.where(novo_val.notna(), novo_val, df_modificado[col])
-        
+
+        # Remove as colunas temporárias criadas no merge
         cols_to_drop = [f"{col}_novo" for col in ["mCAP", "mH"]]
         df_modificado.drop(columns=cols_to_drop, inplace=True)
+
+        # Remove a coluna 'ut' se existir
         if "ut" in df_modificado.columns and "UT" in df_modificado.columns:
             df_modificado.drop(columns=["ut"], inplace=True)
-
     # Verifica se o dicionário 'dados_editados_por_ut' existe e não está vazio
     if 'dados_editados_por_ut' in globals() and dados_editados_por_ut:
 
@@ -376,8 +380,28 @@ def ajustarVolumeHect():
                     df_modificado.at[idx, "mCAP"] = float(cap)
                 if h != "":
                     df_modificado.at[idx, "mH"] = float(h)
+    return df_modificado
+
+def definir_e_recuperarDAP_a():
+
+    df_modificado = definir_e_recuperarValoresPara_mCAP_e_mH()
+
+    # Calculando a coluna 'CAP_a' somente para linhas com 'Categoria' igual a 'CORTE'
+    df_modificado["CAP_a"] = df_modificado.apply(
+        lambda row: round(row["CAP"] * row["mCAP"]) if row["Categoria"] == "CORTE" else row["CAP"],
+        axis=1
+    )
+
+    df_modificado["DAP_a"] = df_modificado.apply(
+        lambda row: ((row["CAP_a"] / np.pi) / 100) if row["Categoria"] == "CORTE" else row["DAP"],
+        axis=1
+    )
+
+    return df_modificado["DAP_a"]
+def adicionarColunasAuxiliares():
+    
             
-                
+    df_modificado = definir_e_recuperarValoresPara_mCAP_e_mH()          
 
     df_modificado["ut"] = df_modificado["UT"]
     df_modificado["Hectares"] = df_modificado["UT_AREA_HA"]
@@ -429,6 +453,17 @@ def ajustarVolumeHect():
     df_modificado["Vol_a"] = ((df_modificado["DAP_a"] ** 2) * np.pi / 4) * df_modificado["H_a"] * 0.7
 
     df_modificado["Categoria"] = df_modificado["Categoria"].astype(str).str.strip().str.upper()
+
+    return df_modificado
+
+
+
+def ajustarVolumeHect():
+    global df_tabelaDeAjusteVol, df_valores_atualizados,df_saida, dados_editados_por_ut
+    
+
+    df_modificado = adicionarColunasAuxiliares()
+
 
     df_filtrado = df_modificado[df_modificado["Categoria"].isin(["CORTE"])]
 
@@ -609,8 +644,9 @@ def processar_planilhas(save):
 
         nomes_selecionados = extrair_nomes_especies()
         print(nomes_selecionados) 
-
-       
+        
+        
+        df_saida["DAP_a"] = definir_e_recuperarDAP_a()
 
         # Primeiro, marque como "REMANESCENTE" se a espécie não estiver selecionada.
         df_saida["Categoria"] = df_saida["Nome Vulgar"].apply(
@@ -667,8 +703,6 @@ def processar_planilhas(save):
                 if "CAP <" in edits:
                     try:
                         DAPminEspUt = (float(edits["CAP <"]) / math.pi ) / 100  # DAPmin agora será o valor de edição específico para a UT
-                        print("valor de  DAPminEspU")
-                        print(DAPminEspUt)
                     except ValueError:
                         pass  # Se não for um número válido, mantém o valor original
 
@@ -686,12 +720,15 @@ def processar_planilhas(save):
 
             # Regras de classificação de DAP
             if isinstance(row["DAP"], (float, int)):
-                if row["DAP"] < DAPmin:
+                # Verifica se a coluna 'DAP_a' existe, e usa o valor de DAP_a se disponível
+                dap = row["DAP_a"] if "DAP_a" in row and isinstance(row["DAP_a"], (float, int)) else row["DAP"]
+                
+                if dap < DAPmin:
                     return "REMANESCENTE"  # Se DAP estiver abaixo de DAPminEspUt, é REMANESCENTE
-                elif DAPmin <= row["DAP"] <= DAPminEspUt :
+                elif DAPmin <= dap <= DAPminEspUt:
                     return "SUBSTITUTA"  # Se DAP estiver dentro do intervalo de DAPminEspUt e DAPmax, é SUBSTITUTA
-                elif row["DAP"] >= DAPmax:
-                    return "REMANESCENTE"  # Se DAP for maior ou igual a DAPmax, também classifica como SUBSTITUTA (ou outra categoria se necessário)
+                elif dap >= DAPmax:
+                    return "REMANESCENTE"  # Se DAP for maior ou igual a DAPmax, também classifica como REMANESCENTE
                 
             # Regras de classificação de QF
             if isinstance(row["QF"], int):
@@ -1048,7 +1085,7 @@ def editar_celula_volume(event):
         nova_janela.geometry("800x700")
 
         # Caminho para o ícone da janela
-        icone_path = resource_path("src/img/icoGreenFlorest.ico")
+        icone_path = resource_path("img/icoGreenFlorest.ico")
 
         # Define o ícone da aplicação
         nova_janela.iconbitmap(icone_path)
@@ -1124,7 +1161,7 @@ def editar_celula_volume(event):
             nova_janela.geometry("800x600")
 
             # Caminho para o ícone da janela
-            icone_path = resource_path("src/img/icoGreenFlorest.ico")
+            icone_path = resource_path("img/icoGreenFlorest.ico")
 
             # Define o ícone da aplicação
             nova_janela.iconbitmap(icone_path)
@@ -1462,7 +1499,7 @@ app = tk.Tk()
 app.title("Handroanthus 1.0")
 
 # Caminho para o ícone da janela
-icone_path = resource_path("src/img/icoGreenFlorest.ico")
+icone_path = resource_path("img/icoGreenFlorest.ico")
 
 # Define o ícone da aplicação
 app.iconbitmap(icone_path)
@@ -1497,7 +1534,7 @@ app.resizable(False, False)  # Permite redimensionamento
 app.maxsize(largura_janela, altura_janela)  # Impede que a janela seja maximizada
 
 # Caminho da imagem de fundo
-caminho_imagem = resource_path("src/img/01florest.png")
+caminho_imagem = resource_path("img/01florest.png")
 
 # Verificar se a imagem existe
 if not os.path.exists(caminho_imagem):
