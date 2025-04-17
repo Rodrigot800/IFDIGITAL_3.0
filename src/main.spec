@@ -45,7 +45,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=['C:\\Users\\Rodrigo Peixoto\\Downloads\\icone ifdigital.ico'],
+    icon=['C:\\Users\\Rodrigo Peixoto\\Downloads\\Handroanthus-icone.ico'],
 )
 coll = COLLECT(
     exe,

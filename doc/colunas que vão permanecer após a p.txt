@@ -11,7 +11,7 @@ as que saíram :
 Folha  Secção Cod.  X Corrigido  Y Corrigido X Negativo Y Negativo
 
 pyinstaller --windowed \
---icon="C:/Users/Rodrigo Peixoto/Downloads/icone ifdigital.ico" \
+--icon="C:/Users/Rodrigo Peixoto/Downloads/Handroanthus-icone.ico" \
 --hidden-import=openpyxl \
 --hidden-import=pandas \
 --hidden-import=tkinter \

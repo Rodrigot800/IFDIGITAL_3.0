@@ -34,7 +34,7 @@ global  df_saida
 # Inicializando o df_resumo globalmente como DataFrame vazio
 df_resumo = pd.DataFrame(columns=[
     "CAPmin", "Espécie", "n° Árvores", "Vol", "Vol/Árvore", 
-    "Volume_a", "Vol_a/Árvore", "Vol/Hect"
+    "Vol_a", "Vol_a/Árvore", "Vol/Hect"
 ])
 dados_editados_por_ut = {}
 
@@ -214,7 +214,7 @@ def editar_linha(event):
     popup = tk.Toplevel(app)
     popup.title("Editar Linha")
     # Caminho para o ícone da janela
-    icone_path = resource_path("img/icoGreenFlorest.ico")
+    icone_path = resource_path("src/img/icoGreenFlorest.ico")
 
     # Define o ícone da aplicação
     popup.iconbitmap(icone_path)
@@ -288,6 +288,13 @@ def tabelaDeResumo():
     for item in table_resumo_especie.get_children():
         table_resumo_especie.delete(item)
 
+    total_arvore = 0
+    total_vol = 0
+    total_vol_a = 0
+    total_volPorArv = 0
+    total_volPorArv_a = 0
+    total_volporhact = 0
+
     # Cópia e filtro
     df_resumo_especies = df_saida.copy()
     df_resumo_especies = df_resumo_especies[df_resumo_especies["Categoria"] == "CORTE"]
@@ -307,6 +314,14 @@ def tabelaDeResumo():
         vol_ha = soma_vol_a / soma_hectares if soma_hectares > 0 else 0.0
 
         cap_min = grupo["CAP_a"].min()
+        
+        total_arvore += qtd_arvores
+        total_vol += soma_vol
+        total_vol_a += soma_vol_a
+        total_volPorArv += vol_por_arvore
+        total_volPorArv_a += vol_a_por_arvore
+        total_volporhact += vol_ha
+
 
         # Cria uma tupla com os valores calculados
         valores = (
@@ -327,7 +342,19 @@ def tabelaDeResumo():
         # Adiciona os valores à lista de dados_resumo
         df_resumo = pd.concat([df_resumo, pd.DataFrame([valores], columns=df_resumo.columns)], ignore_index=True)
 
-    
+    num_especies = df_resumo["Espécie"].nunique()
+    media_volPorArv = total_volPorArv/num_especies
+    media_volPorArv_a = total_volPorArv_a/num_especies
+    media_volporhact = total_volporhact/num_especies
+
+    totalMedia = ["", int(num_especies), round(total_arvore), round(total_vol,3), round(media_volPorArv,3), round(total_vol_a,3), round(media_volPorArv_a,3), round(media_volporhact,3)]
+
+    # Insere na Treeview
+    table_resumo_especie.insert("", "end", values=totalMedia, tags=("totalMedia",))
+
+    # Também adiciona ao DataFrame df_resumo (opcional)
+    df_resumo.loc[len(df_resumo)] = totalMedia
+
 def definir_e_recuperarValoresPara_mCAP_e_mH():
 
     global df_tabelaDeAjusteVol, df_valores_atualizados,df_saida, dados_editados_por_ut
@@ -520,6 +547,33 @@ def ajustarVolumeHect():
     # Imprime os nomes das colunas de df_tabelaDeAjusteVol
     print(df_tabelaDeAjusteVol.columns.tolist())
 
+    # Calculando o total de n_Árvores
+    total_n_Árvores = df_tabelaDeAjusteVol['n_Árvores'].sum()
+    # Calculando os totais para as colunas desejadas
+    total_hectares = df_tabelaDeAjusteVol['Hectares'].sum()
+    total_vol = df_tabelaDeAjusteVol['Vol'].sum()
+    total_vol_max = df_tabelaDeAjusteVol['Vol_Max'].sum()
+    total_diminuir = df_tabelaDeAjusteVol['diminuir'].sum()
+    total_aumentar = df_tabelaDeAjusteVol['aumentar'].sum()
+
+    # Adicionando os totais na última linha da DataFrame
+    df_tabelaDeAjusteVol.loc['Total/Média', 'n_Árvores'] = total_n_Árvores
+    df_tabelaDeAjusteVol.loc['Total/Média', 'Hectares'] = total_hectares
+    df_tabelaDeAjusteVol.loc['Total/Média', 'Vol'] = total_vol
+    df_tabelaDeAjusteVol.loc['Total/Média', 'Vol_Max'] = total_vol_max
+    df_tabelaDeAjusteVol.loc['Total/Média', 'diminuir'] = total_diminuir
+    df_tabelaDeAjusteVol.loc['Total/Média', 'aumentar'] = total_aumentar
+    # Calculando a média da coluna 'Vol/Hect'
+    media_vol_hect = df_tabelaDeAjusteVol['Vol/Hect'].mean()
+
+    # Adicionando a média na linha 'Total/Média' da coluna 'Vol/Hect'
+    df_tabelaDeAjusteVol.loc['Total/Média', 'Vol/Hect'] = media_vol_hect
+
+
+    df_tabelaDeAjusteVol["n_Árvores"] = df_tabelaDeAjusteVol["n_Árvores"].astype(int)
+    # Imprime os nomes das colunas de df_tabelaDeAjusteVol
+    print(df_tabelaDeAjusteVol.columns.tolist())
+
     for col in df_tabelaDeAjusteVol.columns:
         print(col)
    # Definir as tags para alternar entre as cores
@@ -533,17 +587,17 @@ def ajustarVolumeHect():
     # Insere os valores na Treeview table_ut_vol com alternância de cores
     for i, (_, row) in enumerate(df_tabelaDeAjusteVol.iterrows()):
         # Formatando os valores para exibição
-        ut_val = f"{row['ut']:.0f}"
-        hectares_val = f"{row['Hectares']:.5f}"
+        ut_val = "" if pd.isna(row['ut']) else f"{row['ut']:.0f}"
+        hectares_val =  f"{row['Hectares']:.5f}"
         n_Árvores = f"{row['n_Árvores']:.0f}"
         Vol = f"{row['Vol']:.5f}"
         Vol_Max = f"{row['Vol_Max']:.5f}"
         volume_por_hect = f"{row['Vol/Hect']:.3f}"
         diminuir_val = f"{row['diminuir']:.3f}"
         aumentar_val = f"{row['aumentar']:.3f}"
-        dif_pct_val = f"{row['DAP %']:.2f}"  # Exibe a diferença percentual
-        CAP_val = f"{row['mCAP']:.3f}"
-        ALT_val = f"{row['mH']:.0f}"
+        dif_pct_val = "" if pd.isna(row['DAP %']) else  f"{row['DAP %']:.2f}"  # Exibe a diferença percentual
+        CAP_val = "" if pd.isna(row['mCAP']) else  f"{row['mCAP']:.3f}"
+        ALT_val = "" if pd.isna(row['mH']) else  f"{row['mH']:.0f}"
 
         # Alterna as cores das linhas (índices pares e ímpares)
         tag = 'verde_claro' if i % 2 == 0 else 'branca'
@@ -555,7 +609,7 @@ def ajustarVolumeHect():
                                                 dif_pct_val, CAP_val, ALT_val), tags=(tag,))
 
     print("UT, Hectares, Número de Árvores e Volume Total Atualizados:")
-
+    
     # Retorna o DataFrame modificado
     return df_modificado
 
@@ -955,6 +1009,7 @@ def processar_planilhas(save):
             print(f"SUBSTITUTA: {contagem_categorias.get('SUBSTITUTA', 0)}")
             print(f"REMANESCENTE: {contagem_categorias.get('REMANESCENTE', 0)}")
             
+            
             df_saida = ajustarVolumeHect()
             tabelaDeResumo()
 
@@ -971,7 +1026,7 @@ def processar_planilhas(save):
 
                 df_export_resumo = df_resumo[[
                                     "CAPmin", "Espécie", "n° Árvores", "Vol", "Vol/Árvore", 
-                                    "Volume_a", "Vol_a/Árvore", "Vol/Hect"
+                                    "Vol_a", "Vol_a/Árvore", "Vol/Hect"
                                 ]]
 
                 # Diretório onde o arquivo será salvo (exemplo)
@@ -1085,7 +1140,7 @@ def editar_celula_volume(event):
         nova_janela.geometry("800x700")
 
         # Caminho para o ícone da janela
-        icone_path = resource_path("img/icoGreenFlorest.ico")
+        icone_path = resource_path("src/img/icoGreenFlorest.ico")
 
         # Define o ícone da aplicação
         nova_janela.iconbitmap(icone_path)
@@ -1161,7 +1216,7 @@ def editar_celula_volume(event):
             nova_janela.geometry("800x600")
 
             # Caminho para o ícone da janela
-            icone_path = resource_path("img/icoGreenFlorest.ico")
+            icone_path = resource_path("src/img/icoGreenFlorest.ico")
 
             # Define o ícone da aplicação
             nova_janela.iconbitmap(icone_path)
@@ -1499,7 +1554,7 @@ app = tk.Tk()
 app.title("Handroanthus 1.0")
 
 # Caminho para o ícone da janela
-icone_path = resource_path("img/icoGreenFlorest.ico")
+icone_path = resource_path("src/img/icoGreenFlorest.ico")
 
 # Define o ícone da aplicação
 app.iconbitmap(icone_path)
@@ -1534,7 +1589,7 @@ app.resizable(False, False)  # Permite redimensionamento
 app.maxsize(largura_janela, altura_janela)  # Impede que a janela seja maximizada
 
 # Caminho da imagem de fundo
-caminho_imagem = resource_path("img/01florest.png")
+caminho_imagem = resource_path("src/img/01florest.png")
 
 # Verificar se a imagem existe
 if not os.path.exists(caminho_imagem):
